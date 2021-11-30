@@ -1,2 +1,2 @@
 # PineLedge
-PineLedge: Piecewise Newtonian Model for Learning Dynamic Graph Embeddings
+PineLedge: PIecewise NEwtonian Model for LEarning Dynamic Graph Embeddings
