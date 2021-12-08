@@ -96,19 +96,21 @@ class BaseModel(torch.nn.Module):
 
         if node_pairs is None:
 
-            raise NotImplementedError("It should be implemented for every node pairs!")
+            #raise NotImplementedError("It should be implemented for every node pairs!")
+
             # # Compute the pairwise distances for all node pairs
             # # xt is a tensor of size len(times_list) x num of nodes x dim
-            # xt = self.get_xt(times_list=times_list)
+            xt = self.get_xt(times_list=times_list)
+            #pdt = torch.cdist(xt,xt,p=2)
             #
-            # xt_norm = (xt**2).sum(dim=2)
+            #xt_norm = (xt**2).sum(dim=2)
             # xt_norm_view1 = xt_norm.view(xt.shape[0], xt.shape[1], 1)
             # xt_norm_view2 = xt_norm.view(xt.shape[0], 1, xt.shape[1])
             #
             # dist = xt_norm_view1 + xt_norm_view2 - 2.0 * torch.bmm(xt, xt.transpose(2, 1))
             # triu_indices = torch.triu_indices(dist.shape[1], dist.shape[2], offset=1)
             #
-            # return torch.sqrt(dist[:, triu_indices[0], triu_indices[1]]).view(dist.shape[0], -1)
+            return torch.cdist(xt,xt,p=2)
 
         else:
 
