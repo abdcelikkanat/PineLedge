@@ -48,7 +48,7 @@ def GP_regularization(_v,_bin_boundaries,GP_sigma,GP_lambda,cholesky=True):
     # (Velocity x SIGMA^-1 x Velocity^T)
     # NxDx1xT with 1xDxTxT -> NxDx1xT -> sum and squezee -> NxD
     log_exp=((_v.unsqueeze(2)@inv_T_matrix.unsqueeze(0))*(_v.unsqueeze(2))).sum(-1).squeeze(-1)
-    log_det=input_size*(torch.log(torch.linalg.det(T_matrix))+T_matrix.shape[0]*torch.log(pi))
+    log_det=input_size*(torch.log(torch.linalg.det(T_matrix))+T_matrix.shape[0]*torch.log(2*pi))
     log_prior=-0.5*(log_exp.sum()+log_det.sum())
     
     
