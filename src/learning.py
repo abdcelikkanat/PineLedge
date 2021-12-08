@@ -18,6 +18,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim)) - 1, requires_grad=False),
             v=torch.nn.Parameter(2 * torch.rand(size=(bins_num, nodes_num, dim)) - 1, requires_grad=False),
             beta=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, )) - 1, requires_grad=False),
+            gamma=torch.nn.Parameter(torch.rand(size=(bins_num,)), requires_grad=False),
             bins_width=bins_num,
             last_time=last_time,
             seed=seed
@@ -32,7 +33,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__writer = SummaryWriter("../logs/")
 
         # Order matters for sequential learning
-        self.__param_names = ["x0", "v", "beta"]
+        self.__param_names = ["x0", "v", "beta","gamma"]
 
     def get_dataset_size(self):
 
@@ -106,7 +107,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         return self.get_negative_log_likelihood(time_seq_list, node_pairs)
 
-    def __set_gradients(self, beta_grad=None, x0_grad=None, v_grad=None):
+    def __set_gradients(self, beta_grad=None, x0_grad=None, v_grad=None,gamma_grad=None):
 
         if beta_grad is not None:
             self._beta.requires_grad = beta_grad
@@ -116,6 +117,9 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         if v_grad is not None:
             self._v.requires_grad = v_grad
+
+        if gamma_grad is not None:
+            self._gamma.requires_grad = gamma_grad
 
     def __correction(self, centering=None, rotation=None):
 
