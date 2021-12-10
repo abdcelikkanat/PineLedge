@@ -8,12 +8,13 @@ import pickle as pkl
 
 class ConstructionModel(BaseModel):
 
-    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, last_time: float, bins_width: int or list = None, seed: int = 0):
+    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, gamma: torch.Tensor, last_time: float, bins_width: int or list = None, seed: int = 0):
 
         super(ConstructionModel, self).__init__(
             x0=x0,
             v=v,
             beta=beta,
+            gamma = gamma,
             bins_width=bins_width,
             last_time=last_time,
             seed=seed
@@ -25,7 +26,7 @@ class ConstructionModel(BaseModel):
 
         # Add the initial time point
         critical_points = []
-
+        self.compute_bin_bound_width()
         for idx in range(self._bins_num):
 
             interval_init_time = self._bin_boundaries[idx]

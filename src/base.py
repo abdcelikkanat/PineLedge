@@ -9,13 +9,14 @@ class BaseModel(torch.nn.Module):
     '''
     Description
     '''
-    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, last_time: float, bins_width: int or list = None, seed: int = 0):
+    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, gamma: torch.Tensor, last_time: float, bins_width: int or list = None, seed: int = 0):
 
         super(BaseModel, self).__init__()
 
         self._x0 = x0
         self._v = v
         self._beta = beta
+        self._gamma = gamma
         self._seed = seed
         self._init_time = 0  # It is always assumed that the initial time is 0
         self._bins_width = torch.tensor(bins_width)
@@ -33,7 +34,6 @@ class BaseModel(torch.nn.Module):
             self._bin_boundaries = (self._last_time - self._init_time) * bin_widths_cum_sum_ratios + self._init_time
 
         self._bins_width = self._bin_boundaries[1:] - self._bin_boundaries[:-1]
-
         self._bins_num = len(self._bin_boundaries) - 1
 
         # Extract the number of nodes and the dimension size
@@ -52,8 +52,13 @@ class BaseModel(torch.nn.Module):
         np.random.seed(self._seed)
         torch.manual_seed(self._seed)
 
-    def get_bin_boundaries(self):
 
+    def compute_bin_bound_width(self):
+        self._bin_boundaries = torch.cat((torch.zeros(1), self._last_time * torch.cumsum(torch.softmax(self._gamma, dim=0), dim=0)))
+        self._bins_width = self._bin_boundaries[1:] - self._bin_boundaries[:-1]
+        return
+
+    def get_bin_boundaries(self):
         return self._bin_boundaries
 
     def get_bin_widths(self):
@@ -68,6 +73,9 @@ class BaseModel(torch.nn.Module):
             v = self._v
 
         # Find the interval index that the given time point lies on
+        #bin_boundaries = torch.cat(( torch.zeros(1), self._last_time * torch.cumsum(torch.softmax(self._gamma, dim=0), dim=0)))
+        #bins_width = bin_boundaries[1:] - bin_boundaries[:-1]
+
         time_interval_indices = torch.bucketize(times_list, boundaries=self._bin_boundaries[1:-1], right=True)
 
         # Compute the distance of the time points to the initial time of the intervals that they lay on
@@ -89,19 +97,21 @@ class BaseModel(torch.nn.Module):
 
         if node_pairs is None:
 
-            raise NotImplementedError("It should be implemented for every node pairs!")
+            #raise NotImplementedError("It should be implemented for every node pairs!")
+
             # # Compute the pairwise distances for all node pairs
             # # xt is a tensor of size len(times_list) x num of nodes x dim
-            # xt = self.get_xt(times_list=times_list)
+            xt = self.get_xt(times_list=times_list)
+            #pdt = torch.cdist(xt,xt,p=2)
             #
-            # xt_norm = (xt**2).sum(dim=2)
+            #xt_norm = (xt**2).sum(dim=2)
             # xt_norm_view1 = xt_norm.view(xt.shape[0], xt.shape[1], 1)
             # xt_norm_view2 = xt_norm.view(xt.shape[0], 1, xt.shape[1])
             #
             # dist = xt_norm_view1 + xt_norm_view2 - 2.0 * torch.bmm(xt, xt.transpose(2, 1))
             # triu_indices = torch.triu_indices(dist.shape[1], dist.shape[2], offset=1)
             #
-            # return torch.sqrt(dist[:, triu_indices[0], triu_indices[1]]).view(dist.shape[0], -1)
+            return torch.cdist(xt,xt,p=2)
 
         else:
 
@@ -141,6 +151,7 @@ class BaseModel(torch.nn.Module):
         delta_x0 = self._x0[node_pairs[0], :] - self._x0[node_pairs[1], :]
         delta_v = self._v[:, node_pairs[0], :] - self._v[:, node_pairs[1], :]
         delta_xt = self.get_xt(times_list=self._bin_boundaries, x0=delta_x0, v=delta_v)
+        #delta_xt = self.get_xt(times_list=bin_boundaries, x0=delta_x0, v=delta_v)
 
         delta_xt_norm = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
         delta_exp_term = torch.exp(
@@ -155,8 +166,12 @@ class BaseModel(torch.nn.Module):
         return torch.sum(term1 - term0)
 
     def get_negative_log_likelihood(self, time_seq_list: list, node_pairs: torch.tensor):
+        #self._bin_boundaries = self.get_bin_boundaries()
 
+        #bin_boundaries = self._last_time * torch.cumsum(torch.softmax(self._gamma, dim=0), dim=0)
+        self.compute_bin_bound_width()
         integral_term = -self.get_intensity_integral(node_pairs=node_pairs)
+
 
         non_integral_term = 0
         for idx in range(node_pairs.shape[1]):
@@ -168,7 +183,7 @@ class BaseModel(torch.nn.Module):
 
     def get_model_params(self):
 
-        return {"beta": self._beta, "x0": self._x0, "v": self._v}
+        return {"beta": self._beta, "x0": self._x0, "v": self._v,"gamma": self._last_time * torch.cumsum(torch.softmax(self._gamma, dim=0), dim=0)}
 
 
 
