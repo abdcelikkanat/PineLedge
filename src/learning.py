@@ -34,10 +34,6 @@ class LearningModel(BaseModel, torch.nn.Module):
         # Order matters for sequential learning
         self.__param_names = ["x0", "v", "beta"]
 
-    def get_dataset_size(self):
-
-        return len(self.__data_loader)
-
     def learn(self, learning_type="seq"):
 
         # Learns the parameters sequentially
@@ -67,7 +63,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         self.train()
 
-        epoch_loss = 0
+        average_epoch_loss = 0
         for batch_node_pairs, batch_times_list, in self.__data_loader:
 
             # Forward pass
@@ -75,11 +71,16 @@ class LearningModel(BaseModel, torch.nn.Module):
                 time_seq_list=batch_times_list, node_pairs=batch_node_pairs
             )
 
-            batch_loss_value = batch_loss_sum.item()
+            # Store the average batch losses
+            batch_events_count = sum(map(len, batch_times_list))
+            if batch_events_count > 0:
+                average_batch_loss_value = batch_loss_sum.item() / float(batch_events_count)
 
-            if not math.isfinite(batch_loss_value):
-                print(f"Batch loss is {batch_loss_value}, stopping training")
-                sys.exit(1)
+                if not math.isfinite(average_batch_loss_value):
+                    print(f"Batch loss is {average_batch_loss_value}, stopping training")
+                    sys.exit(1)
+
+                average_epoch_loss += average_batch_loss_value
 
             # Set the gradients to 0
             self.__optimizer.zero_grad()
@@ -93,13 +94,11 @@ class LearningModel(BaseModel, torch.nn.Module):
             if correction is not None:
                 correction()
 
-            epoch_loss += batch_loss_value
-
-        average_epoch_loss = epoch_loss / float(self.get_dataset_size())
+        average_epoch_loss = average_epoch_loss / len(self.__data_loader)
 
         self.__writer.add_scalar(tag="Loss/train", scalar_value=average_epoch_loss, global_step=epoch)
 
-        if self.__verbose and (epoch % 10 == 0 or epoch == self.__epochs_num):
+        if self.__verbose and (epoch % 10 == 0 or epoch == self.__epochs_num-1):
             print(f"| Epoch = {epoch} | Loss/train: {average_epoch_loss} |")
 
     def forward(self, time_seq_list, node_pairs):

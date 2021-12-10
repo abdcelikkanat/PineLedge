@@ -1,6 +1,7 @@
 import random
 import numpy as np
 import torch
+from utils.constants import const
 from torch.nn.functional import pdist
 
 
@@ -147,8 +148,8 @@ class BaseModel(torch.nn.Module):
         )
 
         numer = torch.mul(delta_xt_norm, delta_exp_term)
-        term1 = torch.divide(numer[1:, :], torch.mul(delta_xt[1:, :, :], delta_v).sum(dim=2))
-        term0 = torch.divide(numer[:-1, :], torch.mul(delta_xt[:-1, :, :], delta_v).sum(dim=2))
+        term1 = torch.divide(numer[1:, :], torch.mul(delta_xt[1:, :, :], delta_v).sum(dim=2) + const.eps)
+        term0 = torch.divide(numer[:-1, :], torch.mul(delta_xt[:-1, :, :], delta_v).sum(dim=2) + const.eps)
 
         # the result is a matrix of size bins_counts x len(node_pairs)
         return torch.sum(term1 - term0)

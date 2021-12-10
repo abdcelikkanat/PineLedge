@@ -130,3 +130,8 @@ dmypy.json
 
 
 .idea
+logs/*
+datasets/real/*
+datasets/synthetic/*
+outputs/*html
+.DS_Store

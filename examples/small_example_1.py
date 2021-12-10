@@ -2,7 +2,7 @@ import torch
 from src.base import BaseModel
 from src.construction import ConstructionModel
 from src.learning import LearningModel
-from datasets.loader import DatasetLoader
+from datasets.datasets import Dataset
 from src.animation import Animation
 from torch.utils.data import DataLoader
 import numpy as np
@@ -11,24 +11,26 @@ import os
 import sys
 import utils
 
-# A model of two nodes
-x0 = [[-1, 0], [1, 0]]
-v = [[[1, 0], [-1, 0]], [[-1, 0], [1, 0]], [[1, 0], [-1, 0]]]
-beta = [3., 3.]
-bins_width = len(v)
-last_time = 6
-
-# A mode of four nodes
-# x0 = [[-1, 0], [1, 0], [0, 1], [0, -1]]
-# v = [[[1, 0], [-1, 0], [0, 1], [0, -1]], [[-1, 0], [1, 0], [0, -3], [0, 3]], [[1, 0], [-1, 0], [0, 1], [0, -1]]]
-# beta = [3., 3., 3., 3.]
+# # A model of two nodes
+# x0 = [[-1, 0], [1, 0]]
+# v = [[[1, 0], [-1, 0]], [[-1, 0], [1, 0]], [[1, 0], [-1, 0]]]
+# beta = [3., 3.]
 # bins_width = len(v)
 # last_time = 6
 
+# A mode of four nodes
+x0 = [[-1, 0], [1, 0], [0, 1], [0, -1]]
+v = [[[1, 0], [-1, 0], [0, -1], [0, 1]],
+     [[-1, 0], [1, 0], [0, 1], [0, -1]],
+     [[1, 0], [-1, 0], [0, -1], [0, 1]]]
+beta = [3., 3., 3., 3.]
+bins_width = len(v)
+last_time = 6
+
 nodes_num = len(x0)
 dim = len(x0[0])
-batch_size = 2
-learning_rate = 0.01
+batch_size = 64
+learning_rate = 0.1
 epochs_num = 300
 seed = 123
 verbose = True
@@ -47,9 +49,8 @@ cm = ConstructionModel(x0=x0, v=v, beta=beta, bins_width=bins_width, last_time=l
 cm.save(dataset_path)
 
 # Load the dataset
-dataset = DatasetLoader(dataset_path, time_normalization=False)
+dataset = Dataset(dataset_path, time_normalization=False)
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=utils.collate_fn)
-
 # Run the model
 lm = LearningModel(data_loader=data_loader, nodes_num=nodes_num, bins_num=bins_width, dim=dim, last_time=last_time,
                    learning_rate=learning_rate, epochs_num=epochs_num, verbose=verbose, seed=seed)

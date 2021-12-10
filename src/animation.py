@@ -42,14 +42,24 @@ class Animation:
         range_y = [df["y-axis"].min() - self.__padding, df["y-axis"].max() + self.__padding]
 
         plt.figure()
-        fig = px.scatter(df, x="x-axis", y="y-axis", animation_frame="time", animation_group="group",
-                         size=df["size"], color=self.__color_name,
+        fig = px.scatter(df, x="x-axis", y="y-axis", animation_frame="time", size=df["size"], animation_group="group",
+                         color=self.__color_name, color_discrete_sequence=px.colors.qualitative.Pastel,
                          size_max=10, title=self.__title, range_x=range_x, range_y=range_y)
+
+        fig.layout.updatemenus[0].buttons[0].args[1]['frame']['duration'] = 100
+        fig.layout.updatemenus[0].buttons[0].args[1]['transition']['duration'] = 1
+        fig.update_layout(plot_bgcolor='white')
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+        fig.update_traces(marker=dict(size=20, line=dict(width=1, color='DarkSlateGrey')),
+                          selector=dict(mode='markers'))
 
         if self.__figure_path is None:
             fig.show()
         else:
             fig.write_html(self.__figure_path, auto_open=False)
+
+
 
 # import os
 # import torch
