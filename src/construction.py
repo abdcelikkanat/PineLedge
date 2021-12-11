@@ -8,14 +8,13 @@ import pickle as pkl
 
 class ConstructionModel(BaseModel):
 
-    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, gamma: torch.Tensor, last_time: float, bins_width: int or list = None, seed: int = 0):
+    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, gamma: torch.Tensor, last_time: float, bins_rwidth: int or torch.Tensor, seed: int = 0):
 
         super(ConstructionModel, self).__init__(
             x0=x0,
             v=v,
             beta=beta,
-            gamma = gamma,
-            bins_width=bins_width,
+            bins_rwidth=bins_rwidth,
             last_time=last_time,
             seed=seed
         )
@@ -24,13 +23,15 @@ class ConstructionModel(BaseModel):
 
     def __get_critical_points(self, i: int, j: int, x: torch.tensor):
 
+        bin_bounds = self.get_bins_bounds()
+
         # Add the initial time point
         critical_points = []
-        self.compute_bin_bound_width()
-        for idx in range(self._bins_num):
 
-            interval_init_time = self._bin_boundaries[idx]
-            interval_last_time = self._bin_boundaries[idx+1]
+        for idx in range(self.get_num_of_bins()):
+
+            interval_init_time = bin_bounds[idx]
+            interval_last_time = bin_bounds[idx+1]
 
             # Add the initial time point of the interval
             critical_points.append(interval_init_time)
@@ -47,7 +48,7 @@ class ConstructionModel(BaseModel):
                 critical_points.append(t)
 
         # Add the last time point
-        critical_points.append(self._bin_boundaries[-1])
+        critical_points.append(bin_bounds[-1])
 
         return critical_points
 
@@ -62,7 +63,7 @@ class ConstructionModel(BaseModel):
         # Upper triangular matrix of lists
         events_time = {i.item(): {j.item(): [] for j in node_pairs[1]} for i in node_pairs[0]}
         # Get the positions at the beginning of each time bin for every node
-        x = self.get_xt(times_list=self.get_bin_boundaries()[:-1])
+        x = self.get_xt(times_list=self.get_bins_bounds()[:-1])
 
         for i, j in zip(node_pairs[0], node_pairs[1]):
             # Define the intensity function for each node pair (i,j)
@@ -73,7 +74,6 @@ class ConstructionModel(BaseModel):
             nhpp_ij = NHPP(intensity_func=intensity_func, critical_points=critical_points, seed=self._seed)
             ij_events_time = nhpp_ij.simulate()
             # Add the event times
-            #events_time[i.item()][j.item()].extend(ij_events_time)
             events_time[i.item()][j.item()].extend(ij_events_time)
 
         return events_time
