@@ -184,11 +184,12 @@ class LearningModel(BaseModel, torch.nn.Module):
         chosen_v = self._v.transpose(0, 2)[:, node_idx, :]
         # chosen_v: D x chosen_N x B
         # inv_kernel: D x B x B
-        # log_exp_term: chosen_N x D
+        # log_exp_term: D x chosen_N -> scalar
         log_exp_term = -torch.bmm(
             chosen_v, inv_kernel
-        ).mul(chosen_v).sum(dim=2, keepdim=False)
-        log_det = -0.5 * self.get_num_of_bins() + torch.logdet(kernel)
-        log_pi = -0.5 * torch.log(2 * torch.as_tensor(math.pi))
+        ).mul(chosen_v).sum(dim=2, keepdim=False).sum()
+        # log_det: D vector
+        log_det = -0.5 * self.get_num_of_bins() + torch.logdet(kernel).sum() * len(node_idx)
+        log_pi = -0.5 * torch.log(2 * torch.as_tensor(math.pi)) * len(node_idx) * self._dim
 
-        return -(log_pi + log_det + log_exp_term).sum()
+        return -(log_pi + log_det + log_exp_term)

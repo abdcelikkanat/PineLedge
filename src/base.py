@@ -28,7 +28,7 @@ class BaseModel(torch.nn.Module):
         self._seed = seed
         self._init_time = 0  # It is always assumed that the initial time is 0
         self._last_time = last_time
-        self._bins_rwidth = torch.ones(size=(bins_rwidth, ), dtype=torch.float) / bins_rwidth if type(bins_rwidth) is int else torch.as_tensor(bins_rwidth)
+        self._bins_rwidth = torch.ones(size=(bins_rwidth, ), dtype=torch.float) / bins_rwidth if type(bins_rwidth) is int else torch.log(torch.as_tensor(bins_rwidth))
 
         # # Compute the bin boundaries
         # self.__bins_width = self._get_bin_widths()
@@ -84,7 +84,7 @@ class BaseModel(torch.nn.Module):
 
         timeline_len = self._last_time - self._init_time
         bounds = torch.cat((torch.as_tensor([self._init_time]),
-                            self._init_time + torch.cumsum(torch.softmax(bins_rwidth, dim=0), dim=0) * timeline_len
+                            self._init_time + torch.cumsum(torch.softmax(bins_rwidth.type(torch.FloatTensor), dim=0), dim=0) * timeline_len
                             ))
 
         return bounds

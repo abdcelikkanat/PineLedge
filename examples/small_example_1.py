@@ -11,29 +11,27 @@ import os
 import sys
 import utils
 
-# A model of two nodes
-x0 = [[-1, 0], [1, 0]]
-v = [[[1, 0], [-1, 0]], [[-1, 0], [1, 0]], [[1, 0], [-1, 0]]]
-beta = [4., 4.]
-bins_rwidth = len(v)
-last_time = 6
-
-gamma = [0]*len(v)
-
-# # A mode of four nodes
-# x0 = [[-1, 0], [1, 0], [0, 1], [0, -1]]
-# v = [[[1, 0], [-1, 0], [0, -1], [0, 1]],
-#      [[-1, 0], [1, 0], [0, 1], [0, -1]],
-#      [[1, 0], [-1, 0], [0, -1], [0, 1]]]
-# beta = [3., 3., 3., 3.]
+# # A model of two nodes
+# x0 = [[-1, 0], [1, 0]]
+# v = [[[1, 0], [-1, 0]], [[-1, 0], [1, 0]], [[1, 0], [-1, 0]]]
+# beta = [4., 4.]
 # bins_rwidth = len(v)
 # last_time = 6
+
+# A mode of four nodes
+x0 = [[-1, 0], [1, 0], [0, 1], [0, -1]]
+v = [[[1, 0], [-1, 0], [0, -1], [0, 1]],
+     [[-1, 0], [1, 0], [0, 1], [0, -1]],
+     [[1, 0], [-1, 0], [0, -1], [0, 1]]]
+beta = [4., 4., 4., 4.]  #[3., 3., 3., 3.]
+bins_rwidth = len(v)
+last_time = 6
 
 # Set some paremeters
 nodes_num = len(x0)
 dim = len(x0[0])
 batch_size = 64
-learning_rate = 0.1
+learning_rate = 0.01
 epochs_num = 300
 seed = 123
 verbose = True
@@ -44,13 +42,12 @@ viz = 1
 x0 = torch.as_tensor(x0, dtype=torch.float)
 v = torch.as_tensor(v, dtype=torch.float)
 beta = torch.as_tensor(beta, dtype=torch.float)
-gamma = torch.as_tensor(gamma, dtype=torch.float)
 
 filename = "small_example_1"
 dataset_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),'..', "datasets", "synthetic", f"{filename}.pkl")
 
 # Construct the artificial network and save
-cm = ConstructionModel(x0=x0, v=v, beta=beta, gamma=gamma, bins_rwidth=bins_rwidth, last_time=last_time, seed=seed)
+cm = ConstructionModel(x0=x0, v=v, beta=beta, bins_rwidth=bins_rwidth, last_time=last_time, seed=seed)
 cm.save(dataset_path)
 
 # Load the dataset

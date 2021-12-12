@@ -8,7 +8,7 @@ import pickle as pkl
 
 class ConstructionModel(BaseModel):
 
-    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, gamma: torch.Tensor, last_time: float, bins_rwidth: int or torch.Tensor, seed: int = 0):
+    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, last_time: float, bins_rwidth: int or torch.Tensor, seed: int = 0):
 
         super(ConstructionModel, self).__init__(
             x0=x0,
