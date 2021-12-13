@@ -13,7 +13,7 @@ import sys
 import utils
 
 bins_rwidth = [3, 5]
-cluster_sizes = [10, 15]
+cluster_sizes = [4]
 cg = ClusterGraph(cluster_sizes=cluster_sizes, bins_rwidth=bins_rwidth)
 x0, v = cg.get_params()
 
@@ -37,7 +37,7 @@ x0 = torch.as_tensor(x0, dtype=torch.float)
 v = torch.as_tensor(v, dtype=torch.float)
 beta = torch.as_tensor(beta, dtype=torch.float)
 
-filename = "cluster_example"
+filename = f"cluster_example_n={nodes_num}"
 dataset_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),'..', "datasets", "synthetic", f"{filename}.pkl")
 
 # Construct the artificial network and save
@@ -47,6 +47,10 @@ cm.save(dataset_path)
 # Load the dataset
 dataset = Dataset(dataset_path, time_normalization=time_normalization)
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=utils.collate_fn)
+
+lm = LearningModel(data_loader=data_loader, nodes_num=nodes_num, bins_num=3, dim=dim, last_time=last_time,
+                   learning_rate=learning_rate, epochs_num=epochs_num, verbose=verbose, seed=seed)
+lm.learn()
 
 # Visualization
 times_list = torch.linspace(0, last_time, 100)
@@ -59,5 +63,13 @@ embs_gt = bm.get_xt(times_list=times_list).detach().numpy().reshape(-1, 2)
 anim = Animation(embs=embs_gt, time_list=node_times, group_labels=node_ids,
                  colors=[colors[id%len(colors)] for id in node_ids], color_name="Nodes",
                  title="Ground-truth model"+" ".join(filename.split('_')),
-                 padding=0.1
+                 padding=0.1, figure_path=f"../outputs/{filename}_groundtruth.html"
+                 )
+
+# Prediction animation
+embs_pred = lm.get_xt(times_list=times_list).detach().numpy().reshape(-1, 2)
+anim = Animation(embs=embs_pred, time_list=node_times, group_labels=node_ids,
+                 colors=[colors[id%len(colors)] for id in node_ids], color_name="Nodes",
+                 title="Prediction model"+" ".join(filename.split('_')),
+                 padding=0.1, figure_path=f"../outputs/{filename}_pred.html"
                  )
