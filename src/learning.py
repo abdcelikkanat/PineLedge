@@ -156,8 +156,6 @@ class LearningModel(BaseModel, torch.nn.Module):
                 self.__reg_c.requires_grad = True
                 self.__reg_sigma.requires_grad = True
 
-
-
         if bins_rwidth_grad is not None:
             self._bins_rwidth.requires_grad = bins_rwidth_grad
 
