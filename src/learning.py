@@ -15,7 +15,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim)) - 1, requires_grad=False),
             v=torch.nn.Parameter(2 * torch.rand(size=(bins_num, nodes_num, dim)) - 1, requires_grad=False),
             beta=torch.nn.Parameter(2 * torch.rand(size=(nodes_num,)) - 1, requires_grad=False),
-            bins_rwidth=torch.nn.Parameter(torch.ones(size=(bins_num,)) / float(bins_num), requires_grad=False),
+            bins_rwidth=torch.nn.Parameter(torch.zeros(size=(bins_num,)) / float(bins_num), requires_grad=False),
             last_time=last_time,
             seed=seed
         )
@@ -34,6 +34,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__reg_kron = True
 
         if self.__reg_kron:
+
             self.__reg_k = 2
             self.__reg_sigma = torch.nn.Parameter(2 * torch.rand(size=(1, )) - 1, requires_grad=False)
             self.__reg_BL = torch.nn.Parameter(2 * torch.rand(size=(self._dim, self._dim)) - 1, requires_grad=False)
@@ -44,6 +45,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             self.__regularization_func = self.__neg_log_kronecker_gp_regularization
 
         else:
+
             self.__reg_sigma = torch.nn.Parameter(2 * torch.rand(size=(dim, )) - 1, requires_grad=False)
             self.__reg_c = torch.nn.Parameter(2 * torch.rand(size=(dim,)) - 1, requires_grad=False)
             self.__regularization_func = self.__neg_log_gp_regularization
@@ -212,6 +214,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             inv_kernel = torch.linalg.inv(kernel)
 
         return torch.logdet(kernel), inv_kernel
+        # return torch.log(torch.det(kernel) + 1e-10), inv_kernel
 
     def __neg_log_gp_regularization(self, node_idx, cholesky=True):
 
@@ -237,6 +240,42 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         return -(log_pi + log_det + log_exp_term)
 
+    # def __neg_log_kronecker_gp_regularization(self, node_idx, cholesky=True):
+    #
+    #     # A and inv_A: T x T matrix
+    #     sigma_square = self.__reg_sigma * self.__reg_sigma
+    #     log_det_A, inv_A = self.__get_gp_rbf_kernel(sigma_square, cholesky=cholesky)
+    #
+    #     # inv_B: D x D matrix -> inv_BL: DxD lower triangular matrix
+    #     inv_B_L = torch.inverse(self.__reg_BL)
+    #     inv_B = torch.matmul(inv_B_L.transpose(0, 1), inv_B_L)
+    #
+    #     # inv_C: N x N matrix
+    #     # d = self.__reg_Cd[node_idx]
+    #     d = torch.ones(size=(len(node_idx), ), dtype=torch.float)
+    #
+    #     V = torch.mm(torch.diag(torch.div(1.0, d)), torch.mm(self.__reg_CU[node_idx, :], self.__reg_CR))  #self.__reg_CV[node_idx, :]
+    #     inv_C = torch.diag(torch.div(1.0, d)) - torch.mm(V, V.transpose(0, 1))
+    #
+    #     log_det_kernel = + (self._dim * len(node_idx)) * log_det_A \
+    #                      - (self.get_num_of_bins()*len(node_idx)) * torch.logdet(inv_B) \
+    #                      - (self.get_num_of_bins()*self._dim) * torch.logdet(inv_C)
+    #
+    #     inv_kernel = torch.kron(inv_A.contiguous(), torch.kron(inv_B, inv_C))
+    #
+    #     # v: B x N x D tensor
+    #     # chosen: B x chosen_N x D tensor ->
+    #     chosen = self._v.transpose(1, 2)[:, :, node_idx].flatten()
+    #
+    #     result = -0.5 * self._dim * len(node_idx) * self.get_num_of_bins() * ( log_det_kernel + 2 * math.pi) \
+    #              - torch.mul(torch.mul(chosen, inv_kernel), chosen)
+    #
+    #     return -result.sum()
+
+    def __vect(self, x):
+
+        return x.transpose(-2, -1).flatten(-2)
+
     def __neg_log_kronecker_gp_regularization(self, node_idx, cholesky=True):
 
         # A and inv_A: T x T matrix
@@ -249,22 +288,75 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         # inv_C: N x N matrix
         # d = self.__reg_Cd[node_idx]
-        d = torch.ones(size=(len(node_idx), ), dtype=torch.float)
+        d = torch.ones(size=(len(node_idx),), dtype=torch.float)
 
-        V = torch.mm(torch.diag(torch.div(1.0, d)), torch.mm(self.__reg_CU[node_idx, :], self.__reg_CR))  #self.__reg_CV[node_idx, :]
+        V = torch.mm(torch.diag(torch.div(1.0, d)),
+                     torch.mm(self.__reg_CU[node_idx, :], self.__reg_CR))
         inv_C = torch.diag(torch.div(1.0, d)) - torch.mm(V, V.transpose(0, 1))
 
         log_det_kernel = + (self._dim * len(node_idx)) * log_det_A \
-                         - (self.get_num_of_bins()*len(node_idx)) * torch.logdet(inv_B) \
-                         - (self.get_num_of_bins()*self._dim) * torch.logdet(inv_C)
+                         - (self.get_num_of_bins() * len(node_idx)) * torch.logdet(inv_B) \
+                         - (self.get_num_of_bins() * self._dim) * torch.logdet(inv_C)
 
-        inv_kernel = torch.kron(inv_A.contiguous(), torch.kron(inv_B, inv_C))
+
+        # inv_kernel = torch.kron(inv_A.contiguous(), torch.kron(inv_B, inv_C))
 
         # v: B x N x D tensor
-        # chosen: B x chosen_N x D tensor ->
-        chosen = self._v.transpose(1, 2)[:, :, node_idx].flatten()
+        # chosen: B x D x chosen_N tensor ->
+        # chosen = self._v.transpose(1, 2)[:, :, node_idx].flatten()
 
-        result = -0.5 * self._dim * len(node_idx) * self.get_num_of_bins() * ( log_det_kernel + 2 * math.pi) \
-                 - torch.mul(torch.mul(chosen, inv_kernel), chosen)
+        chosen_v = self._v[:, node_idx, :]
+        # print(torch.matmul(inv_C.unsqueeze(0), V).shape)
+        v = self.__vect(chosen_v).flatten()
+        prod = torch.matmul(
+            v,
+            self.__vect(torch.matmul(
+                self.__vect(torch.matmul(torch.matmul(inv_C.unsqueeze(0), chosen_v), inv_B.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
+                inv_A.transpose(0, 1)
+            ))
+        )
 
-        return -result.sum()
+        result = -0.5 * self._dim * len(node_idx) * self.get_num_of_bins() * torch.log(torch.tensor([2 * math.pi])) - 0.5 * log_det_kernel - 0.5 * prod
+
+        return -result
+
+    def prediction(self, node_idx, event_times, test_middle_point, cholesky=True):
+
+        # A and inv_A: T x T matrix
+        sigma_square = self.__reg_sigma * self.__reg_sigma
+        _, inv_A = self.__get_gp_rbf_kernel(sigma_square, cholesky=cholesky)
+
+        # inv_B: D x D matrix -> inv_BL: DxD lower triangular matrix
+        inv_B_L = torch.inverse(self.__reg_BL)
+        inv_B = torch.matmul(inv_B_L.transpose(0, 1), inv_B_L)
+
+        # inv_C: N x N matrix
+        # d = self.__reg_Cd[node_idx]
+        d = torch.ones(size=(len(node_idx),), dtype=torch.float)
+
+        inv_C_V = torch.mm(torch.diag(torch.div(1.0, d)), torch.mm(self.__reg_CU[node_idx, :], self.__reg_CR))
+        inv_C = torch.diag(torch.div(1.0, d)) - torch.mm(inv_C_V, inv_C_V.transpose(0, 1))
+
+        chosen_v = self._v[:, node_idx, :]
+        inv_K_train = torch.kron(inv_A.contiguous(), torch.kron(inv_B, inv_C))
+
+        # Get the number of bin size
+        bin_num = self.get_num_of_bins()
+        # Get the bin bounds
+        bounds = self.get_bins_bounds()
+        # Get the middle time points of the bins for TxT covariance matrix
+        middle_bounds = (bounds[1:] + bounds[:-1]).view(bin_num, 1) / 2.
+        # # Compute the inverse of kernel/covariance matrix
+        # time_mat_train = ((middle_bounds - middle_bounds.transpose(0, 1)) ** 2).squeeze(0)
+        kernel_train_inv = torch.kron(inv_A.contiguous(), torch.kron(inv_B, inv_C))
+
+        # Compute the inverse of kernel/covariance matrix
+        time_mat_test_train = ((test_middle_point.view(1, 1) - middle_bounds.transpose(0, 1)) ** 2)
+        A_test_train = torch.exp(-0.5 * torch.div(time_mat_test_train, sigma_square))
+        kernel_test_train = torch.kron(A_test_train.contiguous(), torch.kron(torch.linalg.inv(inv_B).contiguous(), torch.linalg.inv(inv_C).contiguous()))
+
+        v = self.__vect(chosen_v).flatten()
+        mean_test = torch.matmul(torch.matmul(kernel_test_train, kernel_train_inv), v)
+        K_test = test_middle_point - torch.matmul(torch.matmul(kernel_test_train, inv_K_train), kernel_test_train.transpose(0, 1))
+
+        return 0

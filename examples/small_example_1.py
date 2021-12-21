@@ -31,11 +31,11 @@ last_time = 6
 nodes_num = len(x0)
 dim = len(x0[0])
 batch_size = 64
-learning_rate = 0.01
-epochs_num = 300
+learning_rate = 0.1
+epochs_num = 200
 seed = 123
 verbose = True
-time_normalization = False
+time_normalization = True
 shuffle = False
 viz = 1
 
@@ -54,13 +54,19 @@ cm.save(dataset_path)
 dataset = Dataset(dataset_path, time_normalization=time_normalization)
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=utils.collate_fn)
 # Run the model
-lm = LearningModel(data_loader=data_loader, nodes_num=nodes_num, bins_num=3, dim=dim, last_time=last_time,
+# print(dataset.get_last_time())
+lm = LearningModel(data_loader=data_loader, nodes_num=nodes_num, bins_num=len(v), dim=dim, last_time=1,
                    learning_rate=learning_rate, epochs_num=epochs_num, verbose=verbose, seed=seed)
 lm.learn()
 print(lm.get_model_params())
+print(lm.get_bins_bounds()*6)
 
+# lm.prediction(node_idx=torch.as_tensor([0, 1, 2, 3]),
+#               event_times=torch.as_tensor([1.05, 1.1, 1.15, 1.2]),
+#               test_middle_point=torch.as_tensor([1.1]), cholesky=True)
 
-if viz == 1 :
+viz = 1
+if viz == 1:
     # Visualization
     times_list = torch.linspace(0, last_time, 100)
     node_ids = np.tile(np.arange(nodes_num).reshape(1, -1), (len(times_list), 1)).flatten()
@@ -76,7 +82,7 @@ if viz == 1 :
                      )
 
     # Prediction animation
-    embs_pred = lm.get_xt(times_list=times_list).detach().numpy().reshape(-1, 2)
+    embs_pred = lm.get_xt(times_list=times_list/float(last_time)).detach().numpy().reshape(-1, 2)
     anim = Animation(embs=embs_pred, time_list=node_times, group_labels=node_ids,
                      colors=[colors[id%len(colors)] for id in node_ids], color_name="Nodes",
                      title="Prediction model"+" ".join(filename.split('_')),
