@@ -200,9 +200,10 @@ class LearningModel(BaseModel, torch.nn.Module):
             # self._prior_B_U is upper triangular matrix with positive diagonal entries
             self.__prior_B_U = torch.nn.Parameter(
                 torch.triu(2 * torch.rand(size=(self._dim, self._dim)) - 1, diagonal=1) +
-                torch.diag(torch.rand(size=(self._dim, self._dim))),
+                torch.diag(torch.rand(size=(self._dim, ))),
                 requires_grad=False
             )
+
             self.__prior_C_Q = torch.nn.Parameter(
                 2 * torch.rand(size=(self._nodes_num, self.__prior_k)) - 1, requires_grad=False
             )
@@ -257,7 +258,6 @@ class LearningModel(BaseModel, torch.nn.Module):
         # B = self._prior_B_U @ self._prior_B_U.t()
         B_U = torch.triu(self.__prior_B_U, diagonal=1) + torch.diag(torch.diag(self.__prior_B_U)**2)
         inv_B = torch.cholesky_inverse(B_U)
-
         # # C: N x N matrix
         C_Q = self.__prior_C_Q[nodes, :]
         # C_D = torch.diag(self._prior_C_lambda)
