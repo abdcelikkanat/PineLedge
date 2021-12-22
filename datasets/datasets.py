@@ -10,7 +10,12 @@ DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
 class Dataset(Dataset):
 
-    def __init__(self, file_path, time_normalization=True):
+    def __init__(self, file_path, init_time=0, last_time=None, time_normalization=True):
+
+        super().__init__()
+
+        self.__init_time = init_time
+        self.__last_time = last_time
 
         self.__file_path = file_path
         self.__time_normalization = time_normalization
@@ -39,9 +44,11 @@ class Dataset(Dataset):
 
         if self.__time_normalization:
 
+            assert self.__last_time is not None, "For time normalization, init time must be set!"
+
             for i, j in zip(node_pairs[0], node_pairs[1]):
                 for t_idx, t in enumerate(events_adj_format[i.item()][j.item()]):
-                    events_adj_format[i.item()][j.item()][t_idx] = (t - min_time) / float(max_time)
+                    events_adj_format[i.item()][j.item()][t_idx] = (t - self.__init_time) / float(self.__last_time)
 
             min_time = 0.0
             max_time = 1.0

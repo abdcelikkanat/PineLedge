@@ -213,6 +213,7 @@ class BaseModel(torch.nn.Module):
 
         non_integral_term = 0
         for idx in range(node_pairs.shape[1]):
+            # node_pairs is a matrix of size 2 x batch size matrix
             nodes_pair = node_pairs[:, idx].view(2, 1)
             times_list = time_seq_list[idx]
             non_integral_term += torch.sum(self.get_log_intensity(times_list=times_list, node_pairs=nodes_pair))

@@ -23,7 +23,7 @@ x0 = [[-1, 0], [1, 0], [0, 1], [0, -1]]
 v = [[[1, 0], [-1, 0], [0, -1], [0, 1]],
      [[-1, 0], [1, 0], [0, 1], [0, -1]],
      [[1, 0], [-1, 0], [0, -1], [0, 1]]]
-beta = np.ones((4, ) ) * 4  #[3., 3., 3., 3.]
+beta = np.ones((4, ) ) * 3.  #[3., 3., 3., 3.]
 bins_rwidth = len(v)
 last_time = 6
 
@@ -32,11 +32,11 @@ nodes_num = len(x0)
 dim = len(x0[0])
 batch_size = 64
 learning_rate = 0.01
-epochs_num = 100
+epochs_num = 300
 seed = 123
 verbose = True
-time_normalization = True
-shuffle = False
+time_normalization = False
+shuffle = True
 viz = 1
 
 x0 = torch.as_tensor(x0, dtype=torch.float)
@@ -51,15 +51,14 @@ cm = ConstructionModel(x0=x0, v=v, beta=beta, bins_rwidth=bins_rwidth, last_time
 cm.save(dataset_path)
 
 # Load the dataset
-dataset = Dataset(dataset_path, time_normalization=time_normalization)
+dataset = Dataset(dataset_path, init_time=0, last_time=last_time, time_normalization=time_normalization)
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=utils.collate_fn)
 # Run the model
-# print(dataset.get_last_time())
-lm = LearningModel(data_loader=data_loader, nodes_num=nodes_num, bins_num=len(v), dim=dim, last_time=1,
+lm = LearningModel(data_loader=data_loader, nodes_num=nodes_num, bins_num=len(v), dim=dim, last_time=last_time,
                    learning_rate=learning_rate, epochs_num=epochs_num, verbose=verbose, seed=seed)
 lm.learn()
 print(lm.get_model_params())
-print(lm.get_bins_bounds()*6)
+print(lm.get_bins_bounds())
 
 # lm.prediction(node_idx=torch.as_tensor([0, 1, 2, 3]),
 #               event_times=torch.as_tensor([1.05, 1.1, 1.15, 1.2]),
@@ -72,17 +71,17 @@ if viz == 1:
     node_ids = np.tile(np.arange(nodes_num).reshape(1, -1), (len(times_list), 1)).flatten()
     node_times = np.tile(np.asarray(times_list).reshape(-1, 1), (1, nodes_num)).flatten()
     colors = ['r', 'b', 'g', 'm']
-    # Ground truth animation
-    bm = BaseModel(x0=x0, v=v, beta=beta, last_time=last_time, bins_rwidth=bins_rwidth)
-    embs_gt = bm.get_xt(times_list=times_list).detach().numpy().reshape(-1, 2)
-    anim = Animation(embs=embs_gt, time_list=node_times, group_labels=node_ids,
-                     colors=[colors[id%len(colors)] for id in node_ids], color_name="Nodes",
-                     title="Ground-truth model"+" ".join(filename.split('_')),
-                     padding=0.1
-                     )
+    # # Ground truth animation
+    # bm = BaseModel(x0=x0, v=v, beta=beta, last_time=last_time, bins_rwidth=bins_rwidth)
+    # embs_gt = bm.get_xt(times_list=times_list).detach().numpy().reshape(-1, 2)
+    # anim = Animation(embs=embs_gt, time_list=node_times, group_labels=node_ids,
+    #                  colors=[colors[id%len(colors)] for id in node_ids], color_name="Nodes",
+    #                  title="Ground-truth model"+" ".join(filename.split('_')),
+    #                  padding=0.1
+    #                  )
 
     # Prediction animation
-    embs_pred = lm.get_xt(times_list=times_list/float(last_time)).detach().numpy().reshape(-1, 2)
+    embs_pred = lm.get_xt(times_list=times_list).detach().numpy().reshape(-1, 2)
     anim = Animation(embs=embs_pred, time_list=node_times, group_labels=node_ids,
                      colors=[colors[id%len(colors)] for id in node_ids], color_name="Nodes",
                      title="Prediction model"+" ".join(filename.split('_')),
