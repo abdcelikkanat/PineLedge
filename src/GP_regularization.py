@@ -32,7 +32,7 @@ def GP_regularization(_v,_bin_boundaries,GP_sigma,GP_lambda,cholesky=True):
     inv_GP_var=1/(2*(GP_sigma*GP_sigma))
     
     # Calculate Kernel/Covariance Matrix
-    T_matrix=((GP_lambda*GP_lambda)*torch.exp(-inv_GP_var*torch.abs(middle_bounds.unsqueeze(1)-middle_bounds).unsqueeze(2))).transpose(2,0)
+    T_matrix=((GP_lambda*GP_lambda)*torch.exp(-inv_GP_var*((middle_bounds.unsqueeze(1)-middle_bounds)**2).unsqueeze(2))).transpose(2,0)
     
     # Calcualte Inverse
     if cholesky:
