@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import random
 import functools
-
+import utils
 
 class AlgebraicEquivalence(unittest.TestCase):
 
@@ -22,6 +22,16 @@ class AlgebraicEquivalence(unittest.TestCase):
 
         self.assertEqualTensor(torch.zeros(size=(2, 2)), torch.zeros(size=(2, 2)))
 
+    def test_vectorize_methods(self):
+
+        size = (7, 11, 3)
+        actual = torch.rand(size=size)
+
+        vect = utils.vectorize(actual).flatten()
+        expected = utils.unvectorize(vect, size=size).contiguous()
+
+        self.assertEqualTensor(actual, expected)
+
     def test_mixed_kron_matrix_vector_prod(self):
         A = torch.rand(size=(5, 3))
         B = torch.rand(size=(4, 2))
@@ -38,20 +48,16 @@ class AlgebraicEquivalence(unittest.TestCase):
 
         '''
 
-        def __vect(x):
-
-            return x.transpose(-2, -1).flatten(-2)
-
         A = torch.rand(size=(12, 9))
         B = torch.rand(size=(3, 3))
         C = torch.rand(size=(3, 4))
         V = torch.rand(size=(9, 4, 3))
 
-        v = __vect(V).flatten()
+        v = utils.vectorize(V).flatten()
         true_vect = torch.matmul(torch.kron(A, torch.kron(B, C)), v)
 
-        pred_vect = __vect(torch.matmul(
-                __vect(torch.matmul(torch.matmul(C.unsqueeze(0), V), B.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
+        pred_vect = utils.vectorize(torch.matmul(
+                utils.vectorize(torch.matmul(torch.matmul(C.unsqueeze(0), V), B.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
                 A.transpose(0, 1)
             ))
 
@@ -63,22 +69,18 @@ class AlgebraicEquivalence(unittest.TestCase):
 
         '''
 
-        def __vect(x):
-
-            return x.transpose(-2, -1).flatten(-2)
-
         A = torch.rand(size=(12, 9))
         B = torch.rand(size=(3, 3))
         C = torch.rand(size=(3, 4))
         V = torch.rand(size=(9, 4, 3))
 
-        v = __vect(V).flatten()
+        v = utils.vectorize(V).flatten()
         true_vect = torch.matmul(torch.matmul(v, torch.kron(A, torch.kron(B, C))), v)
 
         pred_vect = torch.matmul(
             v,
-            __vect(torch.matmul(
-                __vect(torch.matmul(torch.matmul(C.unsqueeze(0), V), B.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
+            utils.vectorize(torch.matmul(
+                utils.vectorize(torch.matmul(torch.matmul(C.unsqueeze(0), V), B.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
                 A.transpose(0, 1)
             ))
         )

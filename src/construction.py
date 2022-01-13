@@ -71,7 +71,9 @@ class ConstructionModel(BaseModel):
             # Get the critical points
             critical_points = self.__get_critical_points(i=i, j=j, x=x)
             # Simulate the src
-            nhpp_ij = NHPP(intensity_func=intensity_func, critical_points=critical_points, seed=self._seed)
+            nhpp_ij = NHPP(
+                intensity_func=intensity_func, critical_points=critical_points, seed=self._seed+i*self._nodes_num + j
+            )
             ij_events_time = nhpp_ij.simulate()
             # Add the event times
             events_time[i.item()][j.item()].extend(ij_events_time)
