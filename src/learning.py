@@ -30,7 +30,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__verbose = verbose
 
         # Set the prior function
-        self.__neg_log_prior = self.__set_prior(name="gp_kron", kernels=["rbf", "periodic", ])
+        self.__neg_log_prior = self.__set_prior(name="gp_kron", kernels=["rbf", "periodic"])
 
         # Set the correction function
         self.__correction_func = partial(
@@ -41,7 +41,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__writer = SummaryWriter("../logs/")
 
         # Order matters for sequential learning
-        self.__param_names = [ "x0", "v", "beta"]
+        self.__param_names = [ "x0", "v", "beta", "reg_params", "all"]
 
         # Set the gradient of bins_rwidth
         self.__set_gradients(**{f"bins_rwidth_grad": True})
@@ -78,6 +78,8 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         self.train()
 
+        init_time = time.time()
+
         average_epoch_loss = 0
         for batch_node_pairs, batch_times_list, in self.__data_loader:
             # Forward pass
@@ -113,7 +115,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__writer.add_scalar(tag="Loss/train", scalar_value=average_epoch_loss, global_step=epoch)
 
         if self.__verbose and (epoch % 10 == 0 or epoch == self.__epochs_num - 1):
-            print(f"| Epoch = {epoch} | Loss/train: {average_epoch_loss} |")
+            print(f"| Epoch = {epoch} | Loss/train: {average_epoch_loss} | {time.time() - init_time}")
 
     def forward(self, time_seq_list, node_pairs):
 
@@ -128,7 +130,8 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         # Prior term
         nodes = torch.arange(self._nodes_num)
-        if self._v.requires_grad and self.__neg_log_prior is not None:
+        # if self._v.requires_grad and self.__neg_log_prior is not None:
+        if self.__neg_log_prior is not None:
             nll += self.__neg_log_prior(nodes=nodes)
 
         # if self._v.requires_grad and self.__neg_log_prior is not None:
@@ -188,7 +191,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
             raise ValueError("Invalid prior name!")
 
-    def __set_gradients(self, beta_grad=None, x0_grad=None, v_grad=None, bins_rwidth_grad=None, reg_params_grad=None):
+    def __set_gradients(self, beta_grad=None, x0_grad=None, v_grad=None, bins_rwidth_grad=None, reg_params_grad=None, all_grad=None):
 
         if beta_grad is not None:
             self._beta.requires_grad = beta_grad
@@ -199,16 +202,31 @@ class LearningModel(BaseModel, torch.nn.Module):
         if v_grad is not None:
             self._v.requires_grad = v_grad
 
+        if bins_rwidth_grad is not None:
+            self._bins_rwidth.requires_grad = bins_rwidth_grad
+
+        if reg_params_grad is not None:
+
+            for name, param in self.named_parameters():
+                if param.requires_grad:
+                    param.requires_grad = False
+
             # Set the gradients of the prior function
             for name, param in self.named_parameters():
                 if '__prior' in name:
                     param.requires_grad = True
 
-        if bins_rwidth_grad is not None:
-            self._bins_rwidth.requires_grad = bins_rwidth_grad
+        if all_grad is not None:
 
-        if reg_params_grad is not None:
-            self.__reg_params.requires_grad = reg_params_grad
+            self._beta.requires_grad = all_grad
+            self._x0.requires_grad = all_grad
+            self._v.requires_grad = all_grad
+            self._bins_rwidth.requires_grad = all_grad
+
+            # Set the gradients of the prior function
+            for name, param in self.named_parameters():
+                if '__prior' in name:
+                    param.requires_grad = all_grad
 
     def __correction(self, centering=None, rotation=None):
 

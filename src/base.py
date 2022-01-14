@@ -137,6 +137,52 @@ class BaseModel(torch.nn.Module):
 
         return xt
 
+    def get_norm_sum(self, x0: torch.Tensor, v: torch.Tensor, bin_bounds,
+                     times_list: torch.Tensor, distance: str = "squared_euc") -> torch.Tensor:
+
+        if distance != "squared_euc":
+            raise NotImplementedError("Not implemented for other than squared euclidean.")
+
+        # temp is a tensor of size len(times_list) x node_pairs.shape[0] x dim
+        temp = self.get_xt(times_list=times_list, x0=x0, v=v)
+
+        return torch.sum(torch.norm(temp, p=2, dim=2, keepdim=False) ** 2)
+
+        # coeff = torch.vstack((x0, v))
+        #
+        # torch.bmm(coeff.transpose(1, 0), coeff.permute(1, 2, 0))
+        #
+        # boundary_indices = torch.bucketize(bin_bounds[1:], boundaries=times_list[1:-1], right=True)
+        #
+        # times_list_cumsum = torch.cumsum(times_list, dim=0)
+        #
+        # bin_sums = torch.hstack((torch.zeros(size=(1, )), times_list_cumsum[boundary_indices]))
+        # # print(":", bin_sums)
+        # bin_sums = bin_sums[1:] - bin_sums[:-1]
+        # # print(times_list)
+        # # print(bin_bounds)
+        # # print(bin_sums)
+        #
+        # # boundary_indices also gives the number of elements per bin
+        # remainder_sums_per_bin = bin_sums - boundary_indices * bin_bounds[:-1]
+        # time_sums = remainder_sums_per_bin + boundary_indices *
+        #
+        #
+        # # # time_mat is a vector of size 1 + 2 x num_of_bins whose columns denotes the terms 1, 2t, t^2
+        # # time_mat = torch.hstack((
+        # #     torch.ones(size=(1, )), 2*remainder_sums_per_bin, remainder_sums_per_bin**2
+        # # ))
+        # #
+        # # # coeff is a matrix of size x0.shape[0] x (1 + 2 x num_of_bins) whose columns denotes the terms x^2, <x,v>, v^2
+        # # coeff = torch.hstack((
+        # #     torch.sum(x0**2, dim=1, keepdim=True),
+        # #     torch.bmm(v.transpose(0, 1), x0.unsqueeze(2)).squeeze(2),
+        # #     torch.sum(v.transpose(0, 1)**2, dim=2)
+        # # ))
+        # # cum_displacement = coeff @ time_mat
+        #
+        # return cum_displacement.squeeze(0)
+
     def get_pairwise_distances(self, times_list: torch.Tensor, node_pairs: torch.Tensor = None,
                                distance: str = "squared_euc"):
 
@@ -175,6 +221,16 @@ class BaseModel(torch.nn.Module):
 
             return norm
 
+    def get_pairwise_distances_fast(self, delta_x0: torch.Tensor, delta_v: torch.Tensor, bin_bounds: torch.Tensor,
+                                    times_list: torch.Tensor, distance: str = "squared_euc"):
+
+            if distance == "squared_euc":
+                raise NotImplementedError("!")
+            else:
+                raise ValueError("Invalid distance metric!")
+
+            # return norm
+
     def get_intensity(self, times_list: torch.tensor, node_pairs: torch.tensor, distance: str = "squared_euc"):
 
         # Add an additional axis for beta parameters for time dimension
@@ -190,6 +246,15 @@ class BaseModel(torch.nn.Module):
         intensities += (self._beta[node_pairs[0]] + self._beta[node_pairs[1]]).expand(len(times_list), 1)
 
         return intensities
+
+    def get_log_intensity_fast(self, delta_x0: torch.Tensor, delta_v: torch.Tensor, beta_ij: torch.Tensor,
+                               bin_bounds: torch.Tensor, times_list: torch.Tensor, distance: str = "squared_euc"):
+
+        # Add an additional axis for beta parameters for time dimension
+        intensities_sum = beta_ij
+        intensities_sum += -self.get_norm_sum(times_list=times_list, x0=delta_x0, v=delta_v, bin_bounds=bin_bounds)
+
+        return intensities_sum
 
     def get_intensity_integral(self, x0: torch.Tensor = None, v: torch.Tensor = None, bin_bounds: torch.Tensor = None,
                                node_pairs: torch.tensor = None, distance: str = "squared_euc"):
@@ -247,23 +312,84 @@ class BaseModel(torch.nn.Module):
 
             raise ValueError("Invalid distance metric!")
 
+    def get_intensity_integral_fast(self, delta_x0: torch.Tensor, delta_v: torch.Tensor, beta_ij: torch.Tensor,
+                                    bin_bounds: torch.Tensor = None, distance: str = "squared_euc"):
+
+        if distance == "squared_euc":
+
+            delta_xt = self.get_xt(times_list=bin_bounds[:-1], x0=delta_x0, v=delta_v, bin_bounds=bin_bounds)
+
+            norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
+            # norm_v: a matrix of bins_counts x len(node_pairs)
+            norm_delta_v = torch.norm(delta_v, p=2, dim=2, keepdim=False)
+            inv_norm_delta_v = 1.0 / (norm_delta_v + const.eps)
+            delta_xt_v = (delta_xt * delta_v).sum(dim=2, keepdim=False)
+            r = delta_xt_v * inv_norm_delta_v
+
+            term0 = 0.5 * torch.sqrt(const.pi) * inv_norm_delta_v
+            term1 = torch.exp( beta_ij.unsqueeze(0) + r**2 - norm_delta_xt**2 )
+            term2_u = torch.erf(bin_bounds[1:].expand(norm_delta_v.shape[1], self.get_num_of_bins()).t()*norm_delta_v + r)
+            term2_l = torch.erf(bin_bounds[:-1].expand(norm_delta_v.shape[1], self.get_num_of_bins()).t()*norm_delta_v + r)
+
+            # From bins_counts x len(node_pairs) matrix to a vector
+            return (term0 * term1 * (term2_u - term2_l)).sum(dim=0)
+
+        else:
+
+            raise ValueError("Invalid distance metric!")
+
     def get_negative_log_likelihood(self, time_seq_list: list, node_pairs: torch.tensor):
 
         it = time.time()
         nll = 0
-        integral_term = -self.get_intensity_integral(node_pairs=node_pairs)
+        integral_term = -self.get_intensity_integral(node_pairs=node_pairs).sum()
+        # print(f"Integral term: {time.time() - it}")
 
+        it = time.time()
         non_integral_term = 0
         for idx in range(node_pairs.shape[1]):
-            it = time.time()
+            # it = time.time()
             # node_pairs is a matrix of size 2 x batch size matrix
             nodes_pair = node_pairs[:, idx].view(2, 1)
             times_list = time_seq_list[idx]
-            # non_integral_term += torch.sum(self.get_log_intensity(times_list=times_list, node_pairs=nodes_pair))
-            nll += torch.sum(self.get_log_intensity(times_list=times_list, node_pairs=nodes_pair))
-            nll += integral_term[idx]
+            non_integral_term += torch.sum(self.get_log_intensity(times_list=times_list, node_pairs=nodes_pair))
+            # nll += torch.sum(self.get_log_intensity(times_list=times_list, node_pairs=nodes_pair))
+            # nll += integral_term[idx]
+        # print(f"Non-integral term: {time.time() - it}")
 
-        # return -(integral_term + non_integral_term)
+        return -(integral_term + non_integral_term)
+        # return -nll
+
+    def get_negative_log_likelihood_fast(self, time_seq_list: list, node_pairs: torch.tensor):
+
+        nll = 0
+
+        # Store the velocity and initial position differences for fast computation
+        delta_x0 = self._x0[node_pairs[0], :] - self._x0[node_pairs[1], :]
+        delta_v = self._v[:, node_pairs[0], :] - self._v[:, node_pairs[1], :]
+        beta_ij = self._beta[node_pairs[0]] + self._beta[node_pairs[1]]
+
+        it = time.time()
+        # Integral part
+        nll += -self.get_intensity_integral_fast(
+            delta_x0=delta_x0, delta_v=delta_v, beta_ij=beta_ij, bin_bounds=self.get_bins_bounds()
+        ).sum()
+        # print(f"Integral term: {time.time() - it}")
+
+        it = time.time()
+        # Non-integral part
+        for idx in range(node_pairs.shape[1]):
+
+            time_list = time_seq_list[idx]
+            if len(time_list) > 0:
+
+                nll += self.get_log_intensity_fast(
+                    delta_x0=delta_x0[idx, :].unsqueeze(0), delta_v=delta_v[:, idx, :].unsqueeze(1),
+                    beta_ij=beta_ij[idx], times_list=time_list,  bin_bounds=self.get_bins_bounds(),
+                ).squeeze(0)
+
+        # print(f"Non-integral term: {time.time() - it}")
+
         return -nll
 
     def get_model_params(self):

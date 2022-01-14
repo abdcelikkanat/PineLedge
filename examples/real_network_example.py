@@ -17,7 +17,7 @@ from sklearn.metrics import average_precision_score
 torch.set_num_threads(16)
 
 # Dataset name
-dataset_name = "resistance_game=4" #"LyonSchool" #"resistance_game=4"
+dataset_name = "LyonSchool" #"LyonSchool" #"resistance_game=4"
 
 # Define the dataset path
 dataset_path = os.path.join(
@@ -34,7 +34,7 @@ seed = 123
 verbose = True
 time_normalization = True
 shuffle = True
-actions = ["learn", "animate"] # plot_events
+actions = ["learn"] # plot_events
 
 # Define the model path
 model_file_path = os.path.join(

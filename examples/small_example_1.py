@@ -33,7 +33,7 @@ nodes_num = len(x0)
 dim = len(x0[0])
 batch_size = 4
 learning_rate = 0.01
-epochs_num = 300
+epochs_num = 500
 seed = 123
 verbose = True
 time_normalization = True
@@ -86,7 +86,7 @@ if viz == 1:
                      title="Prediction model"+" ".join(filename.split('_')),
                      padding=0.1,
                      dataset=None,
-                     figure_path=f"../outputs/4nodes_rbf+periodic.html"
+                     figure_path=f"../outputs/4nodes.html"
                      )
 
 
