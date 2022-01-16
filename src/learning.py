@@ -7,6 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 from utils.utils import unvectorize
 import time
 
+
 class LearningModel(BaseModel, torch.nn.Module):
 
     def __init__(self, data_loader, nodes_num, bins_num, dim, last_time: float,
@@ -30,7 +31,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__verbose = verbose
 
         # Set the prior function
-        self.__neg_log_prior = self.__set_prior(name="gp_kron", kernels=["rbf", "periodic"])
+        self.__neg_log_prior = self.__set_prior(name="gp_kron", kernels=["rbf", ])
 
         # Set the correction function
         self.__correction_func = partial(
@@ -41,10 +42,12 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__writer = SummaryWriter("../logs/")
 
         # Order matters for sequential learning
-        self.__param_names = [ "x0", "v", "beta", "reg_params", "all"]
+        self.__param_names = [ "x0", "v", "beta", "reg_params"]  #
 
         # Set the gradient of bins_rwidth
         self.__set_gradients(**{f"bins_rwidth_grad": True})
+
+        self.__add_prior = False
 
     def learn(self, learning_type="seq"):
 
@@ -117,6 +120,23 @@ class LearningModel(BaseModel, torch.nn.Module):
         if self.__verbose and (epoch % 10 == 0 or epoch == self.__epochs_num - 1):
             print(f"| Epoch = {epoch} | Loss/train: {average_epoch_loss} | {time.time() - init_time}")
 
+
+            # # print("l: ", self.__prior_rbf_l, self.__prior_rbf_l.requires_grad)
+            # # Get the middle time points of the bins for TxT covariance matrix
+            # bounds = self.get_bins_bounds()
+            # bin_num = self.get_num_of_bins()
+            # middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, bin_num) / 2.
+            # time_mat = middle_bounds - middle_bounds.transpose(1, 2)
+            # print("------")
+            # print(
+            #     time_mat,
+            # )
+            # print("+")
+            # print(
+            #     self.get_rbf_kernel(time_mat=time_mat)
+            # )
+            # print("======")
+
     def forward(self, time_seq_list, node_pairs):
 
         nll = self.get_negative_log_likelihood(time_seq_list, node_pairs)
@@ -129,9 +149,10 @@ class LearningModel(BaseModel, torch.nn.Module):
         #     nll += self.__prior_weight * self.__neg_log_prior(nodes=nodes)
 
         # Prior term
-        nodes = torch.arange(self._nodes_num)
+        # nodes = torch.arange(self._nodes_num)
+        nodes = torch.unique(node_pairs)
         # if self._v.requires_grad and self.__neg_log_prior is not None:
-        if self.__neg_log_prior is not None:
+        if self.__add_prior:
             nll += self.__neg_log_prior(nodes=nodes)
 
         # if self._v.requires_grad and self.__neg_log_prior is not None:
@@ -207,6 +228,8 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         if reg_params_grad is not None:
 
+            self.__add_prior = True
+
             for name, param in self.named_parameters():
                 if param.requires_grad:
                     param.requires_grad = False
@@ -217,6 +240,8 @@ class LearningModel(BaseModel, torch.nn.Module):
                     param.requires_grad = True
 
         if all_grad is not None:
+
+            self.__add_prior = True
 
             self._beta.requires_grad = all_grad
             self._x0.requires_grad = all_grad
@@ -306,11 +331,14 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         # Compute the inverse
         if cholesky:
+            # print("=", self.__prior_rbf_l**2, self.__prior_rbf_sigma**2)
+            # print(kernel)
             inv_kernel = torch.cholesky_inverse(torch.linalg.cholesky(kernel))
         else:
             inv_kernel = torch.linalg.inv(kernel)
 
         return kernel, inv_kernel
+        # return 1e+6*torch.eye(n=kernel.shape[0]), 1e-6*torch.eye(n=kernel.shape[0])
 
     def __neg_log_prior(self, nodes, cholesky=True):
 

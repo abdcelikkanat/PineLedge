@@ -16,7 +16,7 @@ from sklearn.metrics import average_precision_score
 torch.set_num_threads(16)
 
 # Dataset name
-dataset_name = "resistance_game=4" #"LyonSchool" #"resistance_game=4"
+dataset_name = "ia_enron" #"ia_enron" #"LyonSchool" #"resistance_game=4"
 
 # Define the dataset path
 dataset_path = os.path.join(
@@ -26,14 +26,14 @@ dataset_path = os.path.join(
 # Set some parameters
 dim = 2
 bins_num = 10
-batch_size = 4
+batch_size = 2
 learning_rate = 0.01
 epochs_num = 300
-seed = 123
+seed = 1235678
 verbose = True
 time_normalization = True
 shuffle = True
-actions = ["learn", "animate", "expereval"] # plot_events
+actions = ["learn", "expereval"] # plot_events
 
 # Define the model path
 model_file_path = os.path.join(
@@ -41,13 +41,13 @@ model_file_path = os.path.join(
 )
 
 # Load the dataset
-dataset = Dataset(dataset_path, init_time=0, time_normalization=time_normalization, train_ratio=0.9)
-print(f"Number of nodes: {dataset.get_nodes_num()}")
+dataset = Dataset(dataset_path, init_time=0, time_normalization=time_normalization, train_ratio=0.95)
+print(f"Number of nodes: {dataset.get_num_of_nodes()}")
 
 # Run the model
-data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=utils.collate_fn)
+data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=utils.collate_fn, drop_last=True)
 lm = LearningModel(data_loader=data_loader, nodes_num=dataset.get_num_of_nodes(), bins_num=bins_num, dim=dim,
-                   last_time=1.0, learning_rate=learning_rate, epochs_num=epochs_num,
+                   last_time=0.95, learning_rate=learning_rate, epochs_num=epochs_num,
                    verbose=verbose, seed=seed)
 
 if "learn" in actions:
@@ -120,13 +120,13 @@ if "expereval" in actions:
         #     +lm.get_log_intensity(times_list=torch.as_tensor([sample[2]]), node_pairs=torch.as_tensor([sample[0:2]]).t())
         #     +lm.get_intensity_integral(node_pairs=torch.as_tensor([sample[0:2]]).t())
         # )
-        distances.append(
-            -lm.get_log_intensity(times_list=torch.as_tensor([sample[2]]), node_pairs=torch.as_tensor([sample[0:2]]).t())
-            +lm.get_intensity_integral(node_pairs=torch.as_tensor([sample[0:2]]).t())
-        )
         # distances.append(
-        #     lm.get_log_intensity(times_list=torch.as_tensor([sample[2]]), node_pairs=torch.as_tensor([sample[0:2]]).t())
+        #     -lm.get_log_intensity(times_list=torch.as_tensor([sample[2]]), node_pairs=torch.as_tensor([sample[0:2]]).t())
+        #     +lm.get_intensity_integral(node_pairs=torch.as_tensor([sample[0:2]]).t())
         # )
+        distances.append(
+            lm.get_log_intensity(times_list=torch.as_tensor([sample[2]]), node_pairs=torch.as_tensor([sample[0:2]]).t())
+        )
 
     pred_auc = roc_auc_score(y_true=labels, y_score=distances)
     pred_aps = average_precision_score(y_true=labels, y_score=distances)

@@ -10,12 +10,27 @@ class Experiments:
         self.__dataset = dataset
         self.__set_type = set_type
 
-        self.__num_of_nodes = self.__dataset.get_nodes_num()
+        self.__num_of_nodes = self.__dataset.get_num_of_nodes()
 
-        self.__data = self.__dataset.get_train_data() if self.__set_type == "train" else self.__dataset.get_test_data()
         self.__node_pairs = [[i, j] for i in range(self.__num_of_nodes) for j in range(i + 1, self.__num_of_nodes)]
+        # events = self.__dataset.get_train_data() if self.__set_type == "train" else self.__dataset.get_test_data()
+        # self.__data = [torch.as_tensor(events[p[0]][p[1]]) for p in self.__node_pairs]
+
+        self.__data = self.get_events(set_type=self.__set_type)
 
         self.__samples, self.__labels = self.__construct_samples()
+
+
+    def get_events(self, set_type):
+
+        if set_type == "train":
+            events = self.__dataset.get_train_data()
+        elif self.__set_type == "test":
+            events = self.__dataset.get_test_data()
+        else:
+            raise ValueError("Invalid set type!")
+
+        return [torch.as_tensor(events[p[0]][p[1]]) for p in self.__node_pairs]
 
     def get_samples(self):
 
@@ -151,7 +166,7 @@ class Experiments:
         # num_of_nodes = self.__dataset.get_nodes_num()  # len(nodes)
         # node_pairs = [[i, j] for i in range(num_of_nodes) for j in range(i + 1, num_of_nodes)]
 
-        data = self.__dataset.get_train_data() if set_type == "train" else self.__dataset.get_test_data()
+        data = self.get_events(set_type=set_type)
 
         M = torch.zeros(size=(self.__num_of_nodes, self.__num_of_nodes), dtype=torch.int)
 

@@ -31,7 +31,7 @@ last_time = 30
 # Set some paremeters
 nodes_num = len(x0)
 dim = len(x0[0])
-batch_size = 4
+batch_size = 2
 learning_rate = 0.01
 epochs_num = 500
 seed = 123
@@ -53,13 +53,13 @@ cm.save(dataset_path)
 
 # Load the dataset
 dataset = Dataset(dataset_path, init_time=0, last_time=last_time, shuffle=shuffle, time_normalization=time_normalization)
-dataset.plot_events(node_pairs=[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
+# dataset.plot_events(node_pairs=[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=utils.collate_fn)
 # Run the model
 lm = LearningModel(data_loader=data_loader, nodes_num=nodes_num, bins_num=len(v), dim=dim, last_time=1.,
                    learning_rate=learning_rate, epochs_num=epochs_num, verbose=verbose, seed=seed)
 lm.learn()
-print(lm.get_model_params())
+# print(lm.get_model_params())
 print(lm.get_bins_bounds()*last_time)
 
 
@@ -86,7 +86,7 @@ if viz == 1:
                      title="Prediction model"+" ".join(filename.split('_')),
                      padding=0.1,
                      dataset=None,
-                     figure_path=f"../outputs/4nodes.html"
+                     # figure_path=f"../outputs/4nodes.html"
                      )
 
 
