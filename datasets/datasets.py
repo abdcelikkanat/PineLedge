@@ -34,6 +34,12 @@ class Dataset(Dataset):
 
         self.__events_train, self.__events_test = self.__split_train_test()
 
+        self.__idx2pair = {
+            idx: pair for idx, pair in enumerate(
+                [(i, j) for i in range(self.__num_of_nodes) for j in range(i+1, self.__num_of_nodes)]
+            )
+        }
+
     def __load(self):
 
         with open(self.__file_path, 'rb') as f:
@@ -49,6 +55,7 @@ class Dataset(Dataset):
         self.__first_event = +1e6
         self.__last_event = -1e6
         for i, j in zip(node_pairs[0], node_pairs[1]):
+
             for t in events[i][j]:
                 if t > self.__last_event:
                     self.__last_event = t
@@ -73,6 +80,10 @@ class Dataset(Dataset):
             for t_idx, t in enumerate(self.__events[i][j]):
                 self.__events[i][j][t_idx] = (t - self.__init_time) / timeline_len
 
+            # print(i, j, len(self.__events[i][j]), )
+            # if len(self.__events[i][j]):
+            #     print(min(self.__events[i][j]), max(self.__events[i][j]))
+
         self.__last_time = 1.0
         self.__init_time = 0.0
 
@@ -91,13 +102,14 @@ class Dataset(Dataset):
 
         return events_train, events_test
 
-    def __getitem__(self, node_idx):
+    def __getitem__(self, idx):
 
-        return node_idx, self.__events_train[node_idx]
+        u, v = self.__idx2pair[idx]
+        return u, v, self.__events_train[u][v]
 
     def __len__(self):
 
-        return self.__num_of_nodes
+        return self.__num_of_nodes * (self.__num_of_nodes - 1) // 2
 
     def get_num_of_nodes(self):
 

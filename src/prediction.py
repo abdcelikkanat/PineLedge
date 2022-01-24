@@ -59,6 +59,9 @@ class PredictionModel(torch.nn.Module):
 
         # Compute the initial position
         self._x_init = self._lm.get_xt(times_list=torch.as_tensor([self._test_init_time])).squeeze(0)
+        # x1 = self._x_init[0, :]
+        # x2 = self._x_init[1, :]
+        # print("init", self._test_init_time, torch.dot(x1-x2, x1-x2), x1, x2)
         # A tensor of len(time_samples) x _nodes_num x dim
         self._mean_v_samples = self.get_mean_vt(times_list=self._time_samples, nodes=torch.arange(self._nodes_num))
 
@@ -72,11 +75,9 @@ class PredictionModel(torch.nn.Module):
         )
 
         nll = self.get_log_intensity(times_list=times_list, node_pair=node_pair)
-        # print(nll)
-        # nll += integral_term
-        # print(integral_term)
-        # return torch.exp( -nll )
-        # return torch.exp( nll )
+
+        nll += integral_term
+
         return nll
 
     def get_log_intensity(self, times_list: torch.Tensor, node_pair):
@@ -84,11 +85,13 @@ class PredictionModel(torch.nn.Module):
         assert len(node_pair) == 2, "The input must be 2-nodes."
 
         xt = self.get_mean_displacement(times_list=times_list, nodes=node_pair.view(2,))
+        # xt = self._lm.get_xt(times_list=torch.as_tensor([self._test_init_time])).squeeze(0)[node_pair.t(), :]
+        # xt = torch.zeros(size=xt.shape)
         delta_xt = xt[:, 0, :] - xt[:, 1, :]
         norm = torch.norm(delta_xt, p=2, dim=1, keepdim=False) ** 2
         # Add an additional axis for beta parameters for time dimension
         intensities = (self._beta[node_pair[0]] + self._beta[node_pair[1]]).expand(len(times_list), ) - norm
-
+        # intensities = -norm
         return intensities
 
     def get_mean_displacement(self, times_list: torch.Tensor, nodes: torch.Tensor):
@@ -100,7 +103,8 @@ class PredictionModel(torch.nn.Module):
         time_remainders = times_list - self._time_samples[times_list_indices]
 
         # Riemann integral for computing average displacement
-        xt_disp = torch.sum(self._time_delta * mean_vt, dim=0, keepdim=False)
+        #xt_disp = torch.sum(self._time_delta * mean_vt, dim=0, keepdim=False)
+        xt_disp = torch.cumsum(self._time_delta * self._mean_v_samples[:, nodes, :], dim=0)[times_list_indices, :, :].squeeze(0)
 
         # Remaining displacement
         remain_disp = mean_vt * time_remainders[:, None, None]

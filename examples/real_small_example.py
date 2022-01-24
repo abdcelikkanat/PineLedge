@@ -29,11 +29,11 @@ bins_num = 10
 batch_size = 2
 learning_rate = 0.01
 epochs_num = 300
-seed = 1235678
+seed = 123
 verbose = True
 time_normalization = True
 shuffle = True
-actions = ["learn", "expereval"] # plot_events
+actions = ["expereval"] # plot_events
 
 # Define the model path
 model_file_path = os.path.join(
@@ -89,10 +89,10 @@ if "expereval" in actions:
     # Load the model
     lm.load_state_dict(torch.load(model_file_path))
 
-    exp = Experiments(dataset=dataset, set_type="test")
+    exp = Experiments(dataset=dataset, set_type="test", num_of_intervals=2)
     samples, labels = exp.get_samples(), exp.get_labels()
     # exp.plot_events(u=2, v=3, bins=100)
-
+    utils.plot_events(dataset.get_num_of_nodes(), samples, labels, u=0, v=1)
     # s, l = [], []
     # for x, y in zip(samples, labels):
     #     if x[0] == 0 and x[1] == 1:

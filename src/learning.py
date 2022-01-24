@@ -23,6 +23,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             seed=seed
         )
 
+
         self.__data_loader = data_loader
 
         self.__lr = learning_rate
@@ -31,7 +32,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__verbose = verbose
 
         # Set the prior function
-        self.__neg_log_prior = self.__set_prior(name="gp_kron", kernels=["rbf", ])
+        self.__neg_log_prior = self.__set_prior(name="gp_kron", kernels=["rbf",]) # rbf periodic
 
         # Set the correction function
         self.__correction_func = partial(
@@ -43,6 +44,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         # Order matters for sequential learning
         self.__param_names = [ "x0", "v", "beta", "reg_params"]  #
+        self.__param_epoch_weights = [1, 1, 1, 2] # 3
 
         # Set the gradient of bins_rwidth
         self.__set_gradients(**{f"bins_rwidth_grad": True})
@@ -64,15 +66,18 @@ class LearningModel(BaseModel, torch.nn.Module):
 
     def __sequential_learning(self):
 
-        epoch_num_per_var = int(self.__epochs_num / len(self.__param_names))
+        # epoch_num_per_var = int(self.__epochs_num / len(self.__param_names))
+        epoch_cumsum = torch.cumsum(torch.as_tensor([0] + self.__param_epoch_weights), dim=0)
+        epoch_num_per_var = (self.__epochs_num * epoch_cumsum // torch.sum(torch.as_tensor(self.__param_epoch_weights))).type(torch.int)
 
         for param_idx, param_name in enumerate(self.__param_names):
 
             # Set the gradients
             self.__set_gradients(**{f"{param_name}_grad": True})
 
-            for epoch in range(param_idx * epoch_num_per_var,
-                               min(self.__epochs_num, (param_idx + 1) * epoch_num_per_var)):
+            # for epoch in range(param_idx * epoch_num_per_var,
+            #                    min(self.__epochs_num, (param_idx + 1) * epoch_num_per_var)):
+            for epoch in range(epoch_num_per_var[param_idx], epoch_num_per_var[param_idx+1]):
                 self.__train_one_epoch(
                     epoch=epoch, correction_func=self.__correction_func
                 )
@@ -120,47 +125,15 @@ class LearningModel(BaseModel, torch.nn.Module):
         if self.__verbose and (epoch % 10 == 0 or epoch == self.__epochs_num - 1):
             print(f"| Epoch = {epoch} | Loss/train: {average_epoch_loss} | {time.time() - init_time}")
 
-
-            # # print("l: ", self.__prior_rbf_l, self.__prior_rbf_l.requires_grad)
-            # # Get the middle time points of the bins for TxT covariance matrix
-            # bounds = self.get_bins_bounds()
-            # bin_num = self.get_num_of_bins()
-            # middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, bin_num) / 2.
-            # time_mat = middle_bounds - middle_bounds.transpose(1, 2)
-            # print("------")
-            # print(
-            #     time_mat,
-            # )
-            # print("+")
-            # print(
-            #     self.get_rbf_kernel(time_mat=time_mat)
-            # )
-            # print("======")
-
     def forward(self, time_seq_list, node_pairs):
 
         nll = self.get_negative_log_likelihood(time_seq_list, node_pairs)
 
-        # print(node_pairs)
-        # nodes = torch.as_tensor([node for nodes in node_pairs for node in nodes])
-
-        # nodes = torch.unique(nodes)
-        # if self._v.requires_grad and self.__neg_log_prior is not None:
-        #     nll += self.__prior_weight * self.__neg_log_prior(nodes=nodes)
-
         # Prior term
-        # nodes = torch.arange(self._nodes_num)
         nodes = torch.unique(node_pairs)
         # if self._v.requires_grad and self.__neg_log_prior is not None:
         if self.__add_prior:
             nll += self.__neg_log_prior(nodes=nodes)
-
-        # if self._v.requires_grad and self.__neg_log_prior is not None:
-        #     for j in range(node_pairs.shape[1]):
-        #         nll += self.__prior_weight * self.__neg_log_prior(nodes=torch.unique(node_pairs[:, j]))
-
-        # if self._v.requires_grad and self.__neg_log_prior is not None:
-        #     nll += self.__prior_weight * self.__neg_log_prior(nodes=torch.unique(node_pairs))
 
         return nll
 
@@ -169,6 +142,8 @@ class LearningModel(BaseModel, torch.nn.Module):
         if name.lower() == "gp_kron":
 
             # Parameter initialization
+            self.__prior_kernel_noise_sigma = torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False)
+
             # Set the parameters required for the construction of the matrix A
             self.__prior_A_kernel_names = kwargs["kernels"]
             for kernel_name in self.__prior_A_kernel_names:
@@ -176,7 +151,7 @@ class LearningModel(BaseModel, torch.nn.Module):
                 if kernel_name == "rbf":
 
                     self.__prior_rbf_sigma = torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False)
-                    self.__prior_rbf_l = torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False)
+                    self.__prior_rbf_l = 2.*torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False)
 
                 elif kernel_name == "periodic":
 
@@ -324,6 +299,9 @@ class LearningModel(BaseModel, torch.nn.Module):
         for kernel_name in self.__prior_A_kernel_names:
             kernel_func = getattr(self, 'get_'+kernel_name+'_kernel')
             kernel += kernel_func(time_mat=time_mat)
+
+        # Add a noise term
+        kernel += torch.eye(n=kernel.shape[0], m=kernel.shape[1]) * (self.__prior_kernel_noise_sigma**2)
 
         # If the inverse of the kernel is not required, return only the kernel matrix
         if get_inv is False:
