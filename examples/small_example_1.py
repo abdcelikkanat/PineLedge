@@ -24,16 +24,16 @@ x0 = [[-5, 0], [5, 0], [0, 5], [0, -5]]
 v = [[[1, 0], [-1, 0], [0, -1], [0, 1]],
      [[-1, 0], [1, 0], [0, 1], [0, -1]],
      [[1, 0], [-1, 0], [0, -1], [0, 1]]]
-beta = np.ones((len(x0), ) ) * 1.05  #[3., 3., 3., 3.]
+beta = np.ones((len(v), len(x0), ) ) * 1.05  #[3., 3., 3., 3.]
 bins_rwidth = len(v)
 last_time = 30
 
 # Set some paremeters
 nodes_num = len(x0)
 dim = len(x0[0])
-batch_size = 2
+batch_size = 1
 learning_rate = 0.01
-epochs_num = 500
+epochs_num = 50 # 500
 seed = 123
 verbose = True
 time_normalization = True

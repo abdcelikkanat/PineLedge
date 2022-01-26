@@ -17,12 +17,12 @@ class LearningModel(BaseModel, torch.nn.Module):
         super(LearningModel, self).__init__(
             x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim)) - 1, requires_grad=False),
             v=torch.nn.Parameter(2 * torch.rand(size=(bins_num, nodes_num, dim)) - 1, requires_grad=False),
-            beta=torch.nn.Parameter(2 * torch.rand(size=(nodes_num,)) - 1, requires_grad=False),
+            beta=torch.nn.Parameter(2 * torch.rand(size=(bins_num, nodes_num)) - 1, requires_grad=False),
             bins_rwidth=torch.nn.Parameter(torch.zeros(size=(bins_num,)) / float(bins_num), requires_grad=False),
+            alpha=torch.nn.Parameter(2 * torch.rand(size=(nodes_num*(nodes_num-1)//2, bins_num)) - 1, requires_grad=False),
             last_time=last_time,
             seed=seed
         )
-
 
         self.__data_loader = data_loader
 
@@ -127,13 +127,15 @@ class LearningModel(BaseModel, torch.nn.Module):
 
     def forward(self, time_seq_list, node_pairs):
 
-        nll = self.get_negative_log_likelihood(time_seq_list, node_pairs)
+        nll = self.get_negative_log_likelihood_fast(time_seq_list, node_pairs)
 
         # Prior term
         nodes = torch.unique(node_pairs)
         # if self._v.requires_grad and self.__neg_log_prior is not None:
         if self.__add_prior:
             nll += self.__neg_log_prior(nodes=nodes)
+            # print(nll.shape, self.beta_prior(nodes=nodes).shape)
+            nll += self.beta_prior(nodes=nodes)
 
         return nll
 
@@ -194,6 +196,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         if x0_grad is not None:
             self._x0.requires_grad = x0_grad
+            self._alpha.requires_grad = True
 
         if v_grad is not None:
             self._v.requires_grad = v_grad
@@ -222,6 +225,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             self._x0.requires_grad = all_grad
             self._v.requires_grad = all_grad
             self._bins_rwidth.requires_grad = all_grad
+            self._alpha.requires_grad = True
 
             # Set the gradients of the prior function
             for name, param in self.named_parameters():
@@ -287,6 +291,57 @@ class LearningModel(BaseModel, torch.nn.Module):
         )
 
         return kernel
+
+    def get_beta_kernel(self, bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
+                get_inv: bool = True, cholesky: bool=True):
+
+        # Compute the inverse of kernel/covariance matrix
+        time_mat = bin_centers1 - bin_centers2.transpose(0, 1)
+        # time_mat = time_mat.squeeze(0)
+
+        kernel = self.get_rbf_kernel(time_mat=time_mat)
+
+        # Add a noise term
+        kernel += torch.eye(n=kernel.shape[0], m=kernel.shape[1]) * (self.__prior_kernel_noise_sigma**2)
+
+        # If the inverse of the kernel is not required, return only the kernel matrix
+        if get_inv is False:
+            return kernel
+
+        # Compute the inverse
+        if cholesky:
+            # print("=", self.__prior_rbf_l**2, self.__prior_rbf_sigma**2)
+            # print(kernel)
+            inv_kernel = torch.cholesky_inverse(torch.linalg.cholesky(kernel))
+        else:
+            inv_kernel = torch.linalg.inv(kernel)
+
+        return kernel, inv_kernel
+
+    def beta_prior(self, nodes):
+
+        # Get the number of bin size
+        bin_num = self.get_num_of_bins()
+
+        # Get the bin bounds
+        bounds = self.get_bins_bounds()
+
+        # Get the middle time points of the bins for TxT covariance matrix
+        middle_bounds = (bounds[1:] + bounds[:-1]).view(1, bin_num) / 2.
+
+        # K: T x T matrix
+        K, inv_K = self.get_beta_kernel(
+            bin_centers1=middle_bounds, bin_centers2=middle_bounds, cholesky=True
+        )
+
+        p = torch.matmul(self._beta[:, nodes].transpose(0, 1), torch.matmul(inv_K, self._beta[:, nodes])).sum()
+        # Compute the log-determinant of the product
+        final_dim = K.shape[0]
+        log_det_kernel = torch.logdet(K)
+
+        log_prior_likelihood = -0.5 * (final_dim * math.log(2 * math.pi) + log_det_kernel + p)
+
+        return -log_prior_likelihood.squeeze(0)
 
     def __get_A(self, bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
                 get_inv: bool = True, cholesky: bool=True):

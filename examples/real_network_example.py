@@ -22,13 +22,13 @@ from sklearn.metrics import average_precision_score
 torch.set_num_threads(16)
 
 # Dataset name
-dataset_name = "resistance_game=4" #"LyonSchool" #"resistance_game=4" ia_enron ia_contacts
+dataset_name = "ia_enron" #"LyonSchool" #"resistance_game=4" ia_enron ia_contacts
 # Define the dataset path
 dataset_path = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), "..", "datasets", "real", dataset_name, f"{dataset_name}_events.pkl"
 )
 
-# dataset_name = "4nodedense_periodic"
+# dataset_name = "4nodedense"  #"4nodedense_periodic"
 # # Define the dataset path
 # dataset_path = os.path.join(
 #     os.path.dirname(os.path.realpath(__file__)), "..", "datasets", "synthetic", f"{dataset_name}_events.pkl"
@@ -40,12 +40,12 @@ dim = 2
 bins_num = 10  # 10
 batch_size = 1  # 8
 learning_rate = 0.01  # 0.01
-epochs_num = 100  # 400 / 36
-seed = 12311
+epochs_num = 36  # 400 / 36
+seed = 123
 verbose = True
 time_normalization = True
 shuffle = True
-actions = ["learn", "expereval"]  # "learn", "animate",
+actions = ["learn", "expereval"]  # "learn", "animate", "expereval"
 
 # Define the model path
 model_file_path = os.path.join(
@@ -58,13 +58,13 @@ np.random.seed(seed)
 torch.manual_seed(seed)
 
 # Load the dataset
-dataset = Dataset(dataset_path, init_time=0, time_normalization=time_normalization, train_ratio=0.9, )
+dataset = Dataset(dataset_path, init_time=0, time_normalization=time_normalization, train_ratio=0.95, )
 print(f"Number of nodes: {dataset.get_num_of_nodes()}")
 
 # Run the model
 data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=utils.collate_fn, drop_last=False)
 lm = LearningModel(data_loader=data_loader, nodes_num=dataset.get_num_of_nodes(), bins_num=bins_num, dim=dim,
-                   last_time=0.9, learning_rate=learning_rate, epochs_num=epochs_num,
+                   last_time=0.95, learning_rate=learning_rate, epochs_num=epochs_num,
                    verbose=verbose, seed=seed)
 
 # for _ in range(3):
@@ -99,7 +99,7 @@ if "animate" in actions:
 
     # Prediction animation
     embs_pred = lm.get_xt(times_list=times_list).detach().numpy()
-    print(embs_pred.shape)
+    # print(embs_pred.shape)
     anim = Animation(embs=embs_pred, time_list=node_times, group_labels=node_ids, dataset=None,
                      colors=[colors[id % len(colors)] for id in node_ids], color_name="Nodes",
                      title="Prediction model"+" ".join(dataset_name.split('_')),

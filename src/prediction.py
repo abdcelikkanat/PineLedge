@@ -65,22 +65,47 @@ class PredictionModel(torch.nn.Module):
         # A tensor of len(time_samples) x _nodes_num x dim
         self._mean_v_samples = self.get_mean_vt(times_list=self._time_samples, nodes=torch.arange(self._nodes_num))
 
+    def get_pred_beta(self, times_list: torch.Tensor):
+
+        # Get the middle time points of the bins for TxT covariance matrix
+        middle_bounds = (self._bounds[1:] + self._bounds[:-1]).view(1, self._bin_num) / 2.
+
+        # A: T x T matrix
+        K, inv_K = self._lm.get_beta_kernel(
+            bin_centers1=middle_bounds, bin_centers2=middle_bounds, cholesky=True
+        )
+
+        # Compute the inverse of kernel/covariance matrix
+        K_test_train = self._lm.get_beta_kernel(
+            bin_centers1=middle_bounds, bin_centers2=times_list.view(1, len(times_list)), get_inv=False
+        )
+
+        beta = K_test_train @ inv_K @ self._beta
+
+        return beta
+
     def get_negative_log_likelihood(self, times_list: torch.Tensor, node_pair: torch.Tensor):
 
         assert len(node_pair) == 2, "The input must be a node pair!"
 
-        integral_term = -self._lm.get_intensity_integral(
-            x0=self._x_init, v=self._mean_v_samples[:-1, :, :], node_pairs=node_pair,
-            bin_bounds=self._time_samples #torch.as_tensor([self._test_init_time, self._test_last_time])
-        )
+        pred_beta = self.get_pred_beta(times_list=times_list)
+        # print(pred_beta)
+        # print("Print beta: ", times_list.shape, pred_beta.shape)
 
-        nll = self.get_log_intensity(times_list=times_list, node_pair=node_pair)
+        integral_term = -self._lm.get_intensity_integral(
+            x0=self._x_init, v=self._mean_v_samples[:-1, :, :], beta=pred_beta, node_pairs=node_pair,
+            bin_bounds=self._time_samples #torch.as_tensor([self._test_init_time, self._test_last_time])
+        ).sum()
+
+        # print("s", integral_term.shape)
+
+        nll = self.get_log_intensity(times_list=times_list, node_pair=node_pair, beta=pred_beta)
 
         nll += integral_term
 
         return nll
 
-    def get_log_intensity(self, times_list: torch.Tensor, node_pair):
+    def get_log_intensity(self, times_list: torch.Tensor, node_pair, beta):
 
         assert len(node_pair) == 2, "The input must be 2-nodes."
 
@@ -90,7 +115,9 @@ class PredictionModel(torch.nn.Module):
         delta_xt = xt[:, 0, :] - xt[:, 1, :]
         norm = torch.norm(delta_xt, p=2, dim=1, keepdim=False) ** 2
         # Add an additional axis for beta parameters for time dimension
-        intensities = (self._beta[node_pair[0]] + self._beta[node_pair[1]]).expand(len(times_list), ) - norm
+        # intensities = (beta[node_pair[0]] + beta[node_pair[1]]).expand(len(times_list), ) - norm
+        # print("shape of: ", beta[:, node_pair[0]].shape, norm.shape)
+        intensities = beta[:, node_pair[0]] + beta[:, node_pair[1]] - norm
         # intensities = -norm
         return intensities
 
