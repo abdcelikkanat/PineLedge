@@ -40,12 +40,13 @@ dim = 2
 bins_num = 10  # 10
 batch_size = 1  # 8
 learning_rate = 0.01  # 0.01
-epochs_num = 36  # 400 / 36
+epochs_num = 8  # 400 / 36
 seed = 123
 verbose = True
 time_normalization = True
 shuffle = True
 actions = ["learn", "expereval"]  # "learn", "animate", "expereval"
+set_type = "test"
 
 # Define the model path
 model_file_path = os.path.join(
@@ -81,6 +82,13 @@ if "learn" in actions:
     # # Save the model
     torch.save(lm.state_dict(), model_file_path)
 
+
+pm = PredictionModel(
+        lm=lm, test_init_time=dataset.get_init_time(set_type=set_type),
+        test_last_time=dataset.get_last_time(set_type=set_type)
+    )
+
+
 if "animate" in actions:
 
     # Load the model
@@ -98,7 +106,9 @@ if "animate" in actions:
     colors = ['r', 'b', 'g', 'm']
 
     # Prediction animation
-    embs_pred = lm.get_xt(times_list=times_list).detach().numpy()
+    # embs_pred = lm.get_xt(times_list=times_list).detach().numpy()
+    embs_pred = pm.get_positions(time_list=times_list).detach().numpy()
+
     # print(embs_pred.shape)
     anim = Animation(embs=embs_pred, time_list=node_times, group_labels=node_ids, dataset=None,
                      colors=[colors[id % len(colors)] for id in node_ids], color_name="Nodes",
@@ -107,6 +117,9 @@ if "animate" in actions:
                      # figure_path=f"../outputs/{dataset_name}_gauss+periodic.html"
                      )
 
+
+
+    print("Bitti")
 # Experiments
 if "expereval" in actions:
     from sklearn.metrics import roc_auc_score
@@ -117,12 +130,11 @@ if "expereval" in actions:
     # np.random.seed(seed)
     # torch.manual_seed(seed)
 
-    set_type = "test"
     exp = Experiments(dataset=dataset, set_type=set_type, num_of_bounds=3)
     samples, labels = exp.get_samples(), exp.get_labels()
     # exp.plot_events(u=2, v=3, bins=100)
 
-    utils.plot_events(num_of_nodes=dataset.get_num_of_nodes(), samples=samples, labels=labels, title="GT")
+    # utils.plot_events(num_of_nodes=dataset.get_num_of_nodes(), samples=samples, labels=labels, title="GT")
 
     # Load the model
     lm.load_state_dict(torch.load(model_file_path))
@@ -141,10 +153,7 @@ if "expereval" in actions:
     simon_aps = average_precision_score(y_true=labels, y_score=simon_pred)
     print(f"Simon auc: {simon_auc} / aps: {simon_aps}")
 
-    pm = PredictionModel(
-        lm=lm, test_init_time=dataset.get_init_time(set_type=set_type),
-        test_last_time=dataset.get_last_time(set_type=set_type)
-    )
+
 
     # mean_vt = pm.get_mean_vt(times_list=torch.as_tensor([0.9, 0.95, 0.98]))
     # mean_xt = pm.get_mean_xt(times_list=torch.as_tensor([0.9, 0.95, 0.98]), nodes=torch.as_tensor([0,1]))

@@ -44,7 +44,7 @@ class BaseModel(torch.nn.Module):
 
     def _check_input_params(self):
 
-        assert self._nodes_num == self._v.shape[1] and self._nodes_num == self._beta.shape[1], \
+        assert self._nodes_num == self._v.shape[1] and self._nodes_num == self._beta.shape[0], \
             "The initial position, velocity and bias tensors must contain the same number of nodes."
 
         assert self._dim == self._v.shape[2], \
@@ -185,7 +185,7 @@ class BaseModel(torch.nn.Module):
         # print("o: ", times_list, intensities.shape)
         # intensities += (self._beta[node_pairs[0]] + self._beta[node_pairs[1]]).unsqueeze(0)
         time_indices = torch.bucketize(times_list, boundaries=self.get_bins_bounds()[1:-1], right=True)
-        intensities += (self._beta[time_indices, node_pairs[0]] + self._beta[time_indices, node_pairs[1]])
+        intensities += (self._beta[node_pairs[0]] + self._beta[node_pairs[1]])
 
         return torch.exp(intensities)
 
@@ -226,7 +226,7 @@ class BaseModel(torch.nn.Module):
         # Common variables
         delta_x0 = x0[node_pairs[0], :] - x0[node_pairs[1], :]
         delta_v = v[:, node_pairs[0], :] - v[:, node_pairs[1], :]
-        beta_ij = beta[:, node_pairs[0]] + beta[:, node_pairs[1]]
+        beta_ij = beta[node_pairs[0]] + beta[node_pairs[1]]
 
         if distance == "squared_euc":
 

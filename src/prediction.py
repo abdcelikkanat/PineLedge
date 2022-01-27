@@ -88,18 +88,18 @@ class PredictionModel(torch.nn.Module):
 
         assert len(node_pair) == 2, "The input must be a node pair!"
 
-        pred_beta = self.get_pred_beta(times_list=times_list)
+        # pred_beta = self.get_pred_beta(times_list=times_list)
         # print(pred_beta)
         # print("Print beta: ", times_list.shape, pred_beta.shape)
 
         integral_term = -self._lm.get_intensity_integral(
-            x0=self._x_init, v=self._mean_v_samples[:-1, :, :], beta=pred_beta, node_pairs=node_pair,
+            x0=self._x_init, v=self._mean_v_samples[:-1, :, :], beta=self._beta, node_pairs=node_pair,
             bin_bounds=self._time_samples #torch.as_tensor([self._test_init_time, self._test_last_time])
         ).sum()
 
         # print("s", integral_term.shape)
 
-        nll = self.get_log_intensity(times_list=times_list, node_pair=node_pair, beta=pred_beta)
+        nll = self.get_log_intensity(times_list=times_list, node_pair=node_pair, beta=self._beta)
 
         nll += integral_term
 
@@ -115,9 +115,9 @@ class PredictionModel(torch.nn.Module):
         delta_xt = xt[:, 0, :] - xt[:, 1, :]
         norm = torch.norm(delta_xt, p=2, dim=1, keepdim=False) ** 2
         # Add an additional axis for beta parameters for time dimension
-        # intensities = (beta[node_pair[0]] + beta[node_pair[1]]).expand(len(times_list), ) - norm
+        intensities = (beta[node_pair[0]] + beta[node_pair[1]]).expand(len(times_list), ) - norm
         # print("shape of: ", beta[:, node_pair[0]].shape, norm.shape)
-        intensities = beta[:, node_pair[0]] + beta[:, node_pair[1]] - norm
+        # intensities = beta[:, node_pair[0]] + beta[:, node_pair[1]] - norm
         # intensities = -norm
         return intensities
 
@@ -192,6 +192,19 @@ class PredictionModel(torch.nn.Module):
         # print("xx: ", self._v.shape, mean_vt.shape)
 
         return utils.unvectorize(mean_vt, size=(len(times_list), batch_v.shape[1], batch_v.shape[2]))
+
+    def get_positions(self, time_list):
+
+        train_idx = time_list <= self._train_last_time
+        test_idx = time_list > self._train_last_time
+        train_time_list = time_list[train_idx]
+        test_time_list = time_list[test_idx]
+
+        xt = torch.zeros(size=(len(time_list), self._nodes_num, self._dim))
+        xt[train_idx, :, :] = self._lm.get_xt(times_list=train_time_list)
+        xt[test_idx, :, :] = self.get_mean_displacement(times_list=test_time_list, nodes=torch.arange(self._nodes_num))
+
+        return xt
 
     # def compute_mean_velocity(self, inv_B, inv_C, kernel_train_inv, time_points, nodes=None, cholesky=True):
     #
