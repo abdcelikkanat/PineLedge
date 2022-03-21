@@ -5,6 +5,7 @@ import random
 import functools
 import utils
 
+
 class AlgebraicEquivalence(unittest.TestCase):
 
     def __init__(self, methodName, seed=123):
@@ -54,7 +55,7 @@ class AlgebraicEquivalence(unittest.TestCase):
         V = torch.rand(size=(9, 4, 3))
 
         v = utils.vectorize(V).flatten()
-        true_vect = torch.matmul(torch.kron(A, torch.kron(B, C)), v)
+        true_vect = torch.kron(A, torch.kron(B, C)) @ v
 
         pred_vect = utils.vectorize(torch.matmul(
                 utils.vectorize(torch.matmul(torch.matmul(C.unsqueeze(0), V), B.transpose(0, 1).unsqueeze(0))).transpose(0, 1),

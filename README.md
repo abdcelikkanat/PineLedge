@@ -1,2 +1,2 @@
-# PineLedge
-PineLedge: PIecewise NEwtonian Model for LEarning Dynamic Graph Embeddings
+# 
+: Piecewise Constant Velocity Motion Model for Learning Continous-Time Dynamic Latent Node Representations

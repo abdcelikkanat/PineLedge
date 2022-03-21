@@ -55,11 +55,10 @@ class Animation:
         node0_idx = np.arange(self.__num_of_frames) * self.__num_of_nodes
         node1_idx = np.arange(self.__num_of_frames) * self.__num_of_nodes + 1
 
-
-
         plt.figure()
         fig = px.scatter(df, x="x-axis", y="y-axis", animation_frame="time", size=df["size"], animation_group="group",
-                         color=self.__color_name, color_discrete_sequence=px.colors.qualitative.Pastel,
+                         color=self.__color_name,
+                         color_discrete_sequence=px.colors.qualitative.Pastel,
                          size_max=10, title=self.__title, range_x=range_x, range_y=range_y)
 
         fig.layout.updatemenus[0].buttons[0].args[1]['frame']['duration'] = 100
@@ -134,6 +133,7 @@ class Animation:
             fig.show()
         else:
             fig.write_html(self.__figure_path, auto_open=False)
+            # fig.write_image(self.__figure_path)
 
         plt.figure()
 

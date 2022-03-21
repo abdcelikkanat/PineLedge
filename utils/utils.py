@@ -38,10 +38,27 @@ import numpy as np
 
 def collate_fn(batch):
 
-    u, v, events = batch[0]
-    node_pairs = torch.as_tensor([[u], [v]])
-    # print(events)
-    return node_pairs, [torch.as_tensor(events)]
+    node_pairs = []
+    event_lists = []
+
+    for items in batch:
+        for pair, events in items:
+            node_pairs.append(pair)
+            event_lists.append(torch.as_tensor(events))
+
+    return torch.as_tensor(node_pairs).transpose(0, 1), event_lists
+    #
+    # u, v, events = batch[0]
+    # #node_pairs = torch.as_tensor([[u], [v]])
+    # node_pairs = []
+    # events_list = []
+    # for u, v, events in batch:
+    #     node_pairs.append([u, v])
+    #     events_list.append(torch.as_tensor(events))
+    # # print(events)
+    # node_pairs = torch.as_tensor(node_pairs).transpose(0, 1)
+    # # return node_pairs, [torch.as_tensor(events)]
+    # return node_pairs, events_list
 
 
 def vectorize(x: torch.Tensor):
@@ -52,6 +69,21 @@ def vectorize(x: torch.Tensor):
 def unvectorize(x: torch.Tensor, size):
 
     return x.reshape((size[0], size[2], size[1])).transpose(-1, -2)
+
+
+def mean_normalization(x: torch.Tensor):
+
+    if x.dim() == 2:
+        return x - torch.mean(x, dim=0, keepdim=True)
+
+    elif x.dim() == 3:
+
+        return x - torch.mean(x, dim=1, keepdim=True)
+
+    else:
+
+        raise ValueError("Input of the tensor must be 2 or 3!")
+
 
 
 def plot_events(num_of_nodes, samples, labels, title=""):
@@ -87,3 +119,25 @@ def plot_events(num_of_nodes, samples, labels, title=""):
     plt.grid(axis='x')
     plt.title(title)
     plt.show()
+
+def linearIdx2matIdx(idx, n, k):
+
+    result = np.arange(k)
+
+    num = 0
+    while num < idx:
+
+        col_idx = k-1
+        result[col_idx] += 1
+        while result[col_idx] == n+(col_idx-k+1) :
+            col_idx -= 1
+            result[col_idx] += 1
+
+        if col_idx < k-1:
+            while col_idx < k-1:
+                result[col_idx+1] = result[col_idx] + 1
+                col_idx += 1
+
+        num += 1
+
+    return result

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from src.nhpp import NHPP
 from src.base import BaseModel
-from utils.constants import const
+from utils._constants import const
 import pickle as pkl
 
 

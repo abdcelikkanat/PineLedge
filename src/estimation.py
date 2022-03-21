@@ -1,17 +1,147 @@
 import torch
-from src.base import BaseModel
-from src.construction import ConstructionModel
+# from src.base import BaseModel
+# from src.construction import ConstructionModel
 from src.learning import LearningModel
-from datasets.datasets import Dataset
-from src.animation import Animation
-from torch.utils.data import DataLoader
-from src.experiments import Experiments
+# from datasets.datasets import Dataset
+# from src.animation import Animation
+# from torch.utils.data import DataLoader
+# from src.experiments import Experiments
 import utils.utils
 import numpy as np
 import pandas as pd
 import os
 import sys
 import utils
+
+
+class Estimation(torch.nn.Module):
+    def __init__(self, lm: LearningModel, init_time, split_time, last_time, sample_num=100):
+        super(Estimation, self).__init__()
+
+        self._lm = lm
+        self._init_time = init_time
+        self._split_time = split_time
+        self._last_time = last_time
+
+        # Get the number of nodes
+        self._nodes_num = self._lm.get_number_of_nodes()
+        # Get the initial position
+        self._x0 = self._lm.get_x0()
+        # Get the velocity vectors
+        self._v = self._lm.get_v()
+        # Get the number of bin size for the training set
+        self._bin_num = self._lm.get_num_of_bins()
+        # Get the bin bounds for the training set
+        self._bounds = self._lm.get_bins_bounds()
+        # Get the dimension size
+        self._dim = self._lm.get_dim()
+
+        # Get the position at the splitting time point
+        self._x_split_time = self._lm.get_xt(times_list=torch.as_tensor([self._split_time])).squeeze(0)
+
+        # Sample time points for Reimann integral
+        self._time_samples = torch.linspace(self._init_time, self._last_time, sample_num)
+        self._time_delta = self._time_samples[1] - self._time_samples[0]
+        self._mean_v_time_samples = self._get_mean_vt(times_list=self._time_samples)
+
+    def get_log_intensity(self, time_list: list, node_pairs: list):
+
+        node_pairs = torch.as_tensor(node_pairs)
+        time_list = torch.as_tensor(time_list, dtype=torch.float)
+        train_time_idx = time_list <= self._split_time
+        test_time_idx = time_list > self._split_time
+        train_time_list = time_list[train_time_idx]
+        test_time_list = time_list[test_time_idx]
+
+        intensity = torch.zeros(size=(len(time_list), node_pairs.shape[1]), )
+        if len(train_time_list) > 0:
+            intensity[train_time_idx, :] = self._lm.get_log_intensity(times_list=time_list, node_pairs=node_pairs)
+
+        if len(test_time_list) > 0:
+            xt = self.get_xt(time_list=time_list)
+            xt_delta = xt[:, node_pairs[0], :] - xt[:, node_pairs[1], :]
+            norm = torch.norm(xt_delta, p=2, dim=2, keepdim=False) ** 2
+
+            intensity[test_time_idx, :] = (self._lm._beta[node_pairs[0]] + self._lm._beta[node_pairs[1]]).expand(len(time_list), node_pairs.shape[1])
+            intensity[test_time_idx, :] -= norm
+
+        return intensity
+
+    def _get_mean_vt(self, times_list: torch.Tensor, nodes: torch.Tensor = None):
+
+        # Get the middle time points of the bins for TxT covariance matrix
+        middle_bounds = (self._bounds[1:] + self._bounds[:-1]).view(1, 1, self._bin_num) / 2.
+
+        # A: T x T matrix
+        _, inv_A = self._lm._LearningModel__get_A(
+            bin_centers1=middle_bounds, bin_centers2=middle_bounds, cholesky=True
+        )
+
+        # B: D x D matrix
+        inv_B = self._lm._LearningModel__get_B()
+
+        # C: len(nodes) x len(nodes) matrix
+        inv_C = self._lm._LearningModel__get_C(nodes=nodes)
+
+        # # Compute the inverse of kernel/covariance matrix
+        kernel_train_inv = torch.kron(inv_A.contiguous(), torch.kron(inv_B.contiguous(), inv_C.contiguous()))
+
+        # Compute the inverse of kernel/covariance matrix
+        A_test_train = self._lm._LearningModel__get_A(
+            bin_centers1=middle_bounds, bin_centers2=times_list.view(1, 1, len(times_list)), get_inv=False
+        )
+
+        kernel_test_train = torch.kron(
+            A_test_train.contiguous(), torch.kron(
+                torch.linalg.inv(inv_B).contiguous(), torch.linalg.inv(inv_C).contiguous()
+            )
+        )
+
+        if nodes is None:
+            batch_v = utils.mean_normalization(self._v)
+        else:
+            batch_v = utils.mean_normalization(self._v)[:, nodes, :]
+        v_vect = utils.vectorize(batch_v).flatten()
+
+        # A tensor of size len(times_list) x len(v_vect)
+        mean_vt = kernel_test_train @ kernel_train_inv @ v_vect
+
+        return utils.unvectorize(mean_vt, size=(len(times_list), batch_v.shape[1], batch_v.shape[2]))
+
+    def _get_displacement(self, times_list: torch.Tensor, nodes: torch.Tensor = None):
+
+        mean_vt = self._get_mean_vt(times_list=times_list, nodes=nodes)
+
+        # Find the indices of given time points
+        times_list_indices = torch.bucketize(times_list, boundaries=self._time_samples[1:-1], right=True)
+        # Compute the distance of the time points to the initial time of the intervals that they lay on
+        time_remainders = times_list - self._time_samples[times_list_indices]
+
+        # Riemann integral for computing average displacement
+        #xt_disp = torch.sum(self._time_delta * mean_vt, dim=0, keepdim=False)
+        xt_disp = torch.cumsum(self._time_delta * self._mean_v_time_samples, dim=0)[times_list_indices, :, :].squeeze(0)
+
+        # Remaining displacement
+        remaining_displacement = mean_vt * time_remainders[:, None, None]
+
+        # Get average position
+        mean_xt = xt_disp + remaining_displacement
+
+        return mean_xt
+
+    def get_xt(self, time_list: torch.Tensor):
+
+        train_idx = time_list <= self._split_time
+        test_idx = time_list > self._split_time
+        train_time_list = time_list[train_idx]
+        test_time_list = time_list[test_idx]
+
+        xt = torch.zeros(size=(len(time_list), self._nodes_num, self._dim))
+        xt[train_idx, :, :] = self._lm.get_xt(times_list=train_time_list)
+        displacement = self._get_displacement(times_list=test_time_list, nodes=torch.arange(self._nodes_num))
+        xt[test_idx, :, :] = self._x_split_time + displacement
+
+        return xt
 
 
 class PredictionModel(torch.nn.Module):
@@ -205,121 +335,3 @@ class PredictionModel(torch.nn.Module):
         xt[test_idx, :, :] = self.get_mean_displacement(times_list=test_time_list, nodes=torch.arange(self._nodes_num))
 
         return xt
-
-    # def compute_mean_velocity(self, inv_B, inv_C, kernel_train_inv, time_points, nodes=None, cholesky=True):
-    #
-    #     middle_bounds = self.get_mid_points()
-    #
-    #     # Compute the inverse of kernel/covariance matrix
-    #     A_test_train = self.get_A(
-    #         middle_bounds, time_points.view(1, 1, len(time_points)), cholesky=cholesky, inv=False
-    #     )
-    #
-    #     kernel_test_train = torch.kron(
-    #         A_test_train.contiguous(),
-    #         torch.kron(torch.linalg.inv(inv_B).contiguous(), torch.linalg.inv(inv_C).contiguous())
-    #     )
-    #
-    #     v_vect = utils.vectorize(self._v).flatten()
-    #     time_points_mean_v = kernel_test_train @ kernel_train_inv @ v_vect
-    #
-    #     time_points_mean_v = utils.unvectorize(
-    #         time_points_mean_v, size=(len(time_points), self._nodes_num, self._dim)
-    #     )
-    #
-    #     return time_points_mean_v
-    #
-    # def prediction(self, test_events):
-    #
-    #     middle_bounds = self.get_mid_points()
-    #
-    #     _, inv_A = self.get_A(middle_bounds, middle_bounds, inv=True)
-    #     inv_B = self.get_invB()
-    #     inv_C = self.get_invC()
-    #
-    #     # # Compute the inverse of kernel/covariance matrix
-    #     kernel_train_inv = torch.kron(
-    #         inv_A.contiguous(), torch.kron(inv_B.contiguous(), inv_C.contiguous())
-    #     )
-    #
-    #     time_points_mean_v = self.compute_mean_velocity(inv_B, inv_C, kernel_train_inv, time_points=self._time_points)
-    #     event_points_mean_v = self.compute_mean_velocity(inv_B, inv_C, kernel_train_inv, time_points=test_events)
-    #
-    #     time_points_mean_v_cumsum = torch.cumsum(time_points_mean_v, dim=0)
-    #
-    #     test_events_bin_idx = torch.bucketize(test_events, boundaries=self._time_points[1:-1])
-    #
-    #     # A tensor of size ( # of test_events X # of nodes X dim )
-    #     test_events_nodes_avg_path = self._time_delta * time_points_mean_v_cumsum[test_events_bin_idx, :, :]
-    #     # A vector of size ( # of test_events )
-    #     time_remainders = test_events - self._time_points[test_events_bin_idx]
-    #     avg_path_remainders = torch.mul(event_points_mean_v, time_remainders.unsqueeze(1).unsqueeze(2))
-    #     # Add the remainders
-    #     test_events_nodes_avg_path += avg_path_remainders
-    #
-    #     print(test_events_nodes_avg_path)
-    #
-    #     # Add the last time point of the training set
-    #     xt = self._lm.get_xt(times_list=torch.as_tensor([self._train_last_time]))
-    #     print(xt)
-    #
-    #     test_events_nodes_avg_path += xt
-    #
-    #     print(test_events_nodes_avg_path)
-    #
-    # def get_mid_points(self):
-    #
-    #     # Get the middle time points of the bins for TxT covariance matrix
-    #     middle_bounds = (self.__bounds[1:] + self.__bounds[:-1]).view(1, 1, self.__bin_num) / 2.
-    #
-    #     return middle_bounds
-    #
-    # def get_A(self, bin_centers1: torch.Tensor, bin_centers2: torch.Tensor, inv=True, cholesky=True):
-    #
-    #     # A: T x T matrix
-    #     sigma_square = self._prior_A_sigma * self._prior_A_sigma
-    #
-    #     # Compute the inverse of kernel/covariance matrix
-    #     time_mat = ((bin_centers1 - bin_centers2.transpose(1, 2)) ** 2)
-    #     print("====")
-    #     print(sigma_square)
-    #     print("====")
-    #     if len(sigma_square) > 1:
-    #         time_mat = time_mat.expand(self._dim, len(bin_centers1), len(bin_centers2))
-    #     else:
-    #         time_mat = time_mat.squeeze(0)
-    #
-    #     kernel = torch.exp(-0.5 * torch.div(time_mat, sigma_square))
-    #
-    #     if inv is False:
-    #         return kernel
-    #
-    #     if cholesky:
-    #         inv_kernel = torch.cholesky_inverse(torch.linalg.cholesky(kernel))
-    #     else:
-    #         inv_kernel = torch.linalg.inv(kernel)
-    #
-    #     # return torch.log(torch.det(kernel) + 1e-10), inv_kernel
-    #     return kernel, inv_kernel
-    #
-    # def get_invB(self):
-    #
-    #     # # B: D x D matrix -> self._prior_B_U: D x D upper triangular matrix
-    #     # B = self._prior_B_U @ self._prior_B_U.t()
-    #     B_L = torch.tril(self._prior_B_L, diagonal=-1) + torch.diag(torch.diag(self._prior_B_L)**2)
-    #     inv_B = torch.cholesky_inverse(B_L)
-    #
-    #     return inv_B
-    #
-    # def get_invC(self):
-    #
-    #     # # C: N x N matrix
-    #     C_Q = self._prior_C_Q
-    #     # C_D = torch.diag(self._prior_C_lambda)
-    #     C_inv_D = torch.diag(1.0 / self._prior_C_lambda.expand(self._nodes_num))
-    #     # C = C_D + (C_Q @ C_Q.t())
-    #     # By Woodbury matrix identity
-    #     invDQ = C_inv_D @ C_Q
-    #     inv_C = C_inv_D - invDQ @ torch.inverse(torch.eye(C_Q.shape[1]) + C_Q.t() @ C_inv_D @ C_Q) @ invDQ.t()
-    #
-    #     return inv_C
