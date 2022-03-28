@@ -35,8 +35,8 @@ nodes_num = len(x0)
 dim = len(x0[0])
 batch_size = 4 #1
 learning_rate = 0.1
-epochs_num = 100  # 500
-steps_per_epoch = 100
+epochs_num = 200  # 500
+steps_per_epoch = 5
 seed = 123
 verbose = True
 time_normalization = True
@@ -79,25 +79,25 @@ if visualization:
     colors = ['r', 'b', 'g', 'm']
 
     # Ground truth animation
-    bm = BaseModel(x0=x0, v=v, beta=beta, last_time=last_time, bins_rwidth=bins_rwidth)
-    embs_gt = bm.get_xt(times_list=times_list).detach().numpy().reshape(-1, 2)
-    anim = Animation(embs=embs_gt, time_list=node_times, group_labels=node_ids,
-                     colors=[colors[id%len(colors)] for id in node_ids], color_name="Nodes",
-                     title="Ground-truth model"+" ".join(filename.split('_')),
-                     padding=0.1
-                     )
+    # bm = BaseModel(x0=x0, v=v, beta=beta, last_time=last_time, bins_rwidth=bins_rwidth)
+    # embs_gt = bm.get_xt(times_list=times_list).detach().numpy().reshape(-1, 2)
+    # anim = Animation(embs=embs_gt, time_list=node_times, group_labels=node_ids,
+    #                  colors=[colors[id%len(colors)] for id in node_ids], color_name="Nodes",
+    #                  title="Ground-truth model"+" ".join(filename.split('_')),
+    #                  padding=0.1
+    #                  )
 
     # Prediction animation
     # print(times_list)
 
-    # embs_pred = lm.get_xt(times_list=times_list/last_time).detach().numpy()
-    # anim = Animation(embs=embs_pred, time_list=node_times, group_labels=node_ids,
-    #                  colors=[colors[id%len(colors)] for id in node_ids], color_name="Nodes",
-    #                  title="Predicted model", #title="Predicted model"+" ".join(filename.split('_')),
-    #                  padding=0.1,
-    #                  dataset=None,
-    #                  # figure_path=f"../experiments/outputs/4nodes.html"
-    #                  )
+    embs_pred = lm.get_xt(times_list=times_list/last_time).detach().numpy()
+    anim = Animation(embs=embs_pred, time_list=node_times, group_labels=node_ids,
+                     colors=[colors[id%len(colors)] for id in node_ids], color_name="Nodes",
+                     title="Predicted model", #title="Predicted model"+" ".join(filename.split('_')),
+                     padding=0.1,
+                     dataset=None,
+                     # figure_path=f"../experiments/outputs/4nodes.html"
+                     )
 
 # Experiments
 from sklearn.metrics import roc_auc_score

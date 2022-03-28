@@ -46,7 +46,7 @@ class BaseModel(torch.nn.Module):
 
     def _check_input_params(self):
 
-        assert self._nodes_num == self._v.shape[1] and self._nodes_num == self._beta.shape[0], \
+        assert self._nodes_num == self._v.shape[1], \
             "The initial position, velocity and bias tensors must contain the same number of nodes."
 
         assert self._dim == self._v.shape[2], \
@@ -193,7 +193,7 @@ class BaseModel(torch.nn.Module):
         # print("o: ", times_list, intensities.shape)
         # intensities += (self._beta[node_pairs[0]] + self._beta[node_pairs[1]]).unsqueeze(0)
         time_indices = torch.bucketize(times_list, boundaries=self.get_bins_bounds()[1:-1], right=True)
-        intensities += (self._beta[node_pairs[0]] + self._beta[node_pairs[1]])
+        intensities += (self._beta**2).expand( len(node_pairs[0]) )  #intensities += (self._beta[node_pairs[0]] + self._beta[node_pairs[1]])
 
         return torch.exp(intensities)
 
@@ -201,7 +201,7 @@ class BaseModel(torch.nn.Module):
 
         # Add an additional axis for beta parameters for time dimension
         intensities = -self.get_pairwise_distances(times_list=times_list, node_pairs=node_pairs, distance=distance)
-        intensities += (self._beta[node_pairs[0]] + self._beta[node_pairs[1]]).expand(len(times_list), node_pairs.shape[1])
+        intensities += (self._beta**2).expand(len(times_list), node_pairs.shape[1]) #intensities += (self._beta[node_pairs[0]] + self._beta[node_pairs[1]]).expand(len(times_list), node_pairs.shape[1])
 
         return intensities
 
@@ -234,7 +234,7 @@ class BaseModel(torch.nn.Module):
         # Common variables
         delta_x0 = x0[node_pairs[0], :] - x0[node_pairs[1], :]
         delta_v = v[:, node_pairs[0], :] - v[:, node_pairs[1], :]
-        beta_ij = beta[node_pairs[0]] + beta[node_pairs[1]]
+        beta_ij = (beta**2).expand(len(node_pairs[0]))  #beta[node_pairs[0]] + beta[node_pairs[1]]
 
         # if len(node_pairs.shape) == 1:
         #     delta_x0 = delta_x0.view(1, self._dim)

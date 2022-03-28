@@ -48,7 +48,6 @@ class Events(Dataset):
         return events
 
     def __len__(self):
-
         return fac(self.__nodes_num) // fac(self.__batch_size) // fac(self.__nodes_num - self.__batch_size)
 
     def __set_seed(self, seed):
@@ -183,6 +182,15 @@ class Events(Dataset):
             subevents[i][j] = [t for t in self.__events[i][j] if init_time < t <= last_time]
 
         return Events(subevents)
+
+    def get_freq(self):
+
+        F = np.zeros(shape=(self.__nodes_num, self.__nodes_num), dtype=np.int)
+
+        for i, j in zip(*np.triu_indices(self.__nodes_num, k=1)):
+            F[i, j] = len(self.__events[i][j])
+
+        return F
 
     def info(self):
 

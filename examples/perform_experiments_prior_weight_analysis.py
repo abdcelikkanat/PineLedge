@@ -19,7 +19,7 @@ dim = 2
 bins_num = 10
 learning_rate = 0.1
 epochs_num = 150 #100  # 500
-seed = 10888881
+seed = 666661
 
 batch_size = 9  # resistance_game=4 = 9  #151  # Lyon=242 # # ia_enron=151 # ia_contacts=113
 steps_per_epoch = 5

@@ -8,8 +8,6 @@ from utils import mean_normalization
 import utils
 import time
 
-COUNTER = 0
-
 
 class LearningModel(BaseModel, torch.nn.Module):
 
@@ -20,7 +18,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         super(LearningModel, self).__init__(
             x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim), device=device) - 1, requires_grad=False),
             v=torch.nn.Parameter(2 * torch.rand(size=(bins_num, nodes_num, dim), device=device) - 1, requires_grad=False),
-            beta=torch.nn.Parameter(2 * torch.zeros(size=(nodes_num,), device=device), requires_grad=False),
+            beta=torch.nn.Parameter(0.0 * torch.ones(size=(1,), device=device), requires_grad=False),
             bins_rwidth=torch.nn.Parameter(torch.zeros(size=(bins_num,), device=device) / float(bins_num), requires_grad=False),
             last_time=last_time,
             device=device,
@@ -28,6 +26,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             seed=seed
         )
 
+        self._scale_const = 1e3
         self.initialize_prior_params()
 
         self.__data_loader = data_loader
@@ -49,11 +48,11 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         self.__verbose = verbose
         self.__device = device
-        self.__writer = SummaryWriter("../experiments/logs/determinant")
+        self.__writer = SummaryWriter("../experiments/logs/loss")
 
         # Order matters for sequential learning
-        self.__learning_param_names = [ ["x0", "v"], ["reg_params"] ]  # , ["reg_params"] ["bins_rwidth"] "reg_params" "bins_rwidth" ["v", "bins_rwidth"], ["beta"], ["bins_rwidth"]
-        self.__learning_param_epoch_weights = [2, 1]  # 2
+        self.__learning_param_names = [ ["x0", "v",], ["reg_params"], ]  # , ["reg_params"] ["bins_rwidth"] "reg_params" "bins_rwidth" ["v", "bins_rwidth"], ["beta"], ["bins_rwidth"]
+        self.__learning_param_epoch_weights = [1, 2,  ]  # 2
 
         self.__add_prior = False  # Do not change
 
@@ -82,6 +81,7 @@ class LearningModel(BaseModel, torch.nn.Module):
                 for param_name in param_group:
                     self.__set_gradients(**{f"{param_name}_grad": False})
 
+            # self.__alternating_learning()
             self.__alternating_learning()
 
         else:
@@ -90,6 +90,8 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         if self.__writer is not None:
             self.__writer.close()
+
+        print("Beta: ", self._beta)
 
     def __sequential_learning(self):
 
@@ -119,6 +121,34 @@ class LearningModel(BaseModel, torch.nn.Module):
         current_param_group_idx = 0
         while current_epoch < self.__epochs_num:
 
+            # Set the gradients to True
+            for param_name in self.__learning_param_names[current_param_group_idx]:
+                self.__set_gradients(**{f"{param_name}_grad": True})
+
+            # self.__optimizer = torch.optim.Adam(self.parameters(), lr=self.__learning_rate)
+
+            for _ in range(self.__learning_param_epoch_weights[current_param_group_idx]):
+
+                self.__train_one_epoch(epoch=current_epoch, correction_func=self.__correction_func, optimizer=self.__optimizer[current_param_group_idx])
+                current_epoch += 1
+
+            # Set the gradients to False
+            for param_name in self.__learning_param_names[current_param_group_idx]:
+                self.__set_gradients(**{f"{param_name}_grad": False})
+
+            # Iterate the parameter group id
+            current_param_group_idx = (current_param_group_idx + 1) % len(self.__learning_param_epoch_weights)
+
+    def __alternating_learning_with_weight(self):
+
+        current_epoch = 0
+        current_param_group_idx = 0
+
+        const_val_list = [1e3, 1e2, 1e1, 1e0]
+        while current_epoch < self.__epochs_num:
+
+            self._scale_const = const_val_list[math.floor(current_epoch / (self.__epochs_num / len(const_val_list)))]
+            print(current_epoch, self._scale_const)
             # Set the gradients to True
             for param_name in self.__learning_param_names[current_param_group_idx]:
                 self.__set_gradients(**{f"{param_name}_grad": True})
@@ -187,8 +217,8 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         average_epoch_loss = average_epoch_loss / float(self.__steps_per_epoch)
 
-        # if self.__writer is not None:
-        #     self.__writer.add_scalar(tag="Loss/train", scalar_value=average_epoch_loss, global_step=epoch)
+        if self.__writer is not None:
+            self.__writer.add_scalar(tag="Loss/train", scalar_value=average_epoch_loss, global_step=epoch)
 
         if self.__verbose and (epoch % 10 == 0 or epoch == self.__epochs_num - 1):
             print(f"| Epoch = {epoch} | Loss/train: {average_epoch_loss} | Elapsed time: {time.time() - init_time}")
@@ -207,8 +237,8 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         return nll
 
-    def initialize_prior_params(self, scale_const: float = 1e0, kernel_names: list = None):
-
+    def initialize_prior_params(self, kernel_names: list = None):
+        #: float = 1e3,
         # Initialize the prior terms
         # Set the parameters required for the construction of the matrix A
         self.__kernel_names = ["rbf"] if kernel_names is None else kernel_names
@@ -219,7 +249,7 @@ class LearningModel(BaseModel, torch.nn.Module):
                 # Output variance
                 if len(self.__kernel_names) > 1:
                     self.__prior_rbf_sigma = torch.nn.Parameter(
-                        2 * scale_const * torch.rand(size=(1,)) - scale_const, requires_grad=False
+                        2 * self._scale_const * torch.rand(size=(1,)) - self._scale_const, requires_grad=False
                     )
                 # Length scale
                 self.__prior_rbf_l = torch.nn.Parameter(
@@ -230,7 +260,7 @@ class LearningModel(BaseModel, torch.nn.Module):
                 # Output variance
                 if len(self.__kernel_names) > 1:
                     self.__prior_periodic_sigma = torch.nn.Parameter(
-                        2 * scale_const * torch.rand(size=(1,)) - scale_const, requires_grad=False
+                        2 * self._scale_const * torch.rand(size=(1,)) - self._scale_const, requires_grad=False
                     )
                 # Period
                 self.__prior_periodic_p = torch.nn.Parameter(
@@ -246,27 +276,27 @@ class LearningModel(BaseModel, torch.nn.Module):
                 raise ValueError("Invalid kernel name")
 
         # Set the noise term for the kernel
-        self.__prior_kernel_noise = torch.nn.Parameter(2 * scale_const * torch.rand(size=(1,)) - 1, requires_grad=False)
+        self.__prior_kernel_noise = torch.nn.Parameter(2 * self._scale_const * torch.rand(size=(1,)) - 1, requires_grad=False)
 
         # Set the parameters required for the construction of the matrix B
         # self._prior_B_L is lower triangular matrix with positive diagonal entries
         self.__prior_B_L = torch.nn.Parameter(
-            torch.tril(2 * scale_const * torch.rand(size=(self._dim, self._dim)) - scale_const, diagonal=-1) +
-            scale_const * torch.diag(torch.rand(size=(self._dim,))),
+            torch.tril(2 * self._scale_const * torch.rand(size=(self._dim, self._dim)) - self._scale_const, diagonal=-1) +
+            self._scale_const * torch.diag(torch.rand(size=(self._dim,))),
             requires_grad=False
         )
         # Set the noise term for the kernel
         self.__prior_B_noise = torch.nn.Parameter(
-            (2.0 / scale_const) * torch.rand(size=(1,)) - (1.0 / scale_const), requires_grad=False
+            (2.0 / self._scale_const) * torch.rand(size=(1,)) - (1.0 / self._scale_const), requires_grad=False
         )
 
         # Set the parameters required for the construction of the matrix C
         self.__prior_C_Q_dim = 2
         self.__prior_C_Q = torch.nn.Parameter(
-            (2.0 / scale_const) * torch.rand(size=(self._nodes_num, self.__prior_C_Q_dim)) - (1.0 / scale_const), requires_grad=False
+            (2.0 / self._scale_const) * torch.rand(size=(self._nodes_num, self.__prior_C_Q_dim)) - (1.0 / self._scale_const), requires_grad=False
         )
         self.__prior_C_lambda = torch.nn.Parameter(
-            (2.0 / scale_const) * torch.rand(size=(1,)) - (1.0 / scale_const), requires_grad=False
+            (2.0 / self._scale_const) * torch.rand(size=(1,)) - (1.0 / self._scale_const), requires_grad=False
         )
 
     # def __set_prior(self, kernels: list = None):
@@ -430,10 +460,6 @@ class LearningModel(BaseModel, torch.nn.Module):
         log_det_kernel = (final_dim / self.get_num_of_bins()) * torch.logdet(A) \
                          - (final_dim / self._dim) * torch.logdet(inv_B) \
                          - (final_dim / len(nodes)) * torch.logdet(inv_C)
-
-        global COUNTER
-        self.__writer.add_scalar(tag="Determinant", scalar_value=log_det_kernel.item(), global_step=COUNTER)
-        COUNTER += 1
 
         log_prior_likelihood = -0.5 * (final_dim * math.log(2 * math.pi) + log_det_kernel + p)
         #log_prior_likelihood = torch.logdet(A) + torch.logdet(inv_B)

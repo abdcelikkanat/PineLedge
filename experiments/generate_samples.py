@@ -5,15 +5,17 @@ sys.path.insert(0, '.')
 from src.events import Events
 from src.experiments import Experiments
 
+## Parameters
 seed = 123
 time_normalization = True
 init_time = 0.0
 last_time = 1.0
-split_time = 0.8
+split_time = 1.0 #0.8
+####
 
 #dataset = "ia_enron"
 #dataset_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),'..', "datasets", "real", dataset, f"{dataset}_events.pkl")
-dataset = "4nodedense"
+dataset = "three_clusters"
 dataset_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),'..', "datasets", "synthetic", f"{dataset}_events.pkl")
 
 # Read the events
@@ -50,7 +52,7 @@ test_labels, test_samples = exp.construct_samples(
 )
 
 exp.plot_samples(labels=train_labels, samples=train_samples)
-exp.plot_samples(labels=test_labels, samples=test_samples)
+# exp.plot_samples(labels=test_labels, samples=test_samples)
 
 
 filename = f"{dataset}_tInit={init_time}_tLast={last_time}_sTime={split_time}_binNum={bins_num}_subsampling={subsampling}"

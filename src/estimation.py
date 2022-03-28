@@ -62,7 +62,7 @@ class Estimation(torch.nn.Module):
             xt_delta = xt[:, node_pairs[0], :] - xt[:, node_pairs[1], :]
             norm = torch.norm(xt_delta, p=2, dim=2, keepdim=False) ** 2
 
-            intensity[test_time_idx, :] = (self._lm._beta[node_pairs[0]] + self._lm._beta[node_pairs[1]]).expand(len(time_list), node_pairs.shape[1])
+            intensity[test_time_idx, :] = self._lm._beta.expand(len(time_list), node_pairs.shape[1]) #(self._lm._beta[node_pairs[0]] + self._lm._beta[node_pairs[1]]).expand(len(time_list), node_pairs.shape[1])
             intensity[test_time_idx, :] -= norm
 
         return intensity
