@@ -61,7 +61,7 @@ class ConstructionModel(BaseModel):
         node_pairs = torch.triu_indices(row=self._nodes_num, col=self._nodes_num, offset=1)
 
         # Upper triangular matrix of lists
-        events_time = {i.item(): {j.item(): [] for j in node_pairs[1]} for i in node_pairs[0]}
+        events_time = {i: {j: [] for j in range(i+1, self._nodes_num)} for i in range(self._nodes_num-1)}
         # Get the positions at the beginning of each time bin for every node
         x = self.get_xt(times_list=self.get_bins_bounds()[:-1])
 

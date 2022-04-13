@@ -183,6 +183,39 @@ class Events(Dataset):
 
         return Events(subevents)
 
+    def get_validation_events(self, num=None, p=None):
+
+        assert (num is None and p is not None) or (num is not None and p is None), \
+            "Number or the percent value must be non-empty!"
+
+        if num is None:
+            num = int(self.__nodes_num * (self.__nodes_num - 1) / 2 * p)
+
+        count = 0
+        chosen_indices = [[] for _ in range(self.__nodes_num-1)]
+        while count < num:
+
+            node1, node2 = np.random.randint(low=0, high=self.__nodes_num, size=(2, ))
+
+            if node1 > node2:
+                temp = node1
+                node1 = node2
+                node2 = temp
+
+            if node1 != node2 and node2 not in chosen_indices[node1]:
+                chosen_indices[node1].append(node2)
+                count += 1
+
+        remaining_events = copy.deepcopy(self.__events)
+        validation_events = {i: {j: [] for j in range(i+1, self.__nodes_num)} for i in range(self.__nodes_num-1)}
+        for node1 in range(self.__nodes_num-1):
+            for node2 in chosen_indices[node1]:
+                validation_events[node1][node2].extend(remaining_events[node1][node2])
+                remaining_events[node1][node2].clear()
+
+        return Events(remaining_events, batch_size=self.__batch_size), \
+               Events(validation_events, batch_size=self.__batch_size)
+
     def get_freq(self):
 
         F = np.zeros(shape=(self.__nodes_num, self.__nodes_num), dtype=np.int)
