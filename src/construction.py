@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from src.nhpp import NHPP
 from src.base import BaseModel
-from utils._constants import const
+from utils import const
 import pickle as pkl
 
 
@@ -89,5 +89,6 @@ class ConstructionModel(BaseModel):
         with open(file_path, 'wb') as f:
             pkl.dump(
                 {"pairs": torch.triu_indices(row=self._nodes_num, col=self._nodes_num, offset=1),
-                 "events": self.__events}, f
+                 "events": self.__events, "last_time": self._last_time
+                 }, f
             )

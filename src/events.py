@@ -60,7 +60,7 @@ class Events(Dataset):
 
         with open(file_path, 'rb') as f:
             data = pkl.load(f)
-        print(data.keys())
+
         self.__initialize(
             events=data["events"], nodes_num=data.get("n", len(data["events"][0].keys()) + 1)
         )
@@ -183,13 +183,7 @@ class Events(Dataset):
 
         return Events(subevents)
 
-    def get_validation_events(self, num=None, p=None):
-
-        assert (num is None and p is not None) or (num is not None and p is None), \
-            "Number or the percent value must be non-empty!"
-
-        if num is None:
-            num = int(self.__nodes_num * (self.__nodes_num - 1) / 2 * p)
+    def get_validation_events(self, num):
 
         count = 0
         chosen_indices = [[] for _ in range(self.__nodes_num-1)]

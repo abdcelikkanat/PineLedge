@@ -13,7 +13,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
     def __init__(self, data_loader, nodes_num, bins_num, dim, last_time: float,
                  learning_rate: float, prior_weight: float = 1.0, epochs_num: int = 100, steps_per_epoch=10,
-                 device: torch.device = "cpu", verbose: bool = False, seed: int = 0):
+                 device: torch.device = "cpu", verbose: bool = False, seed: int = 0, approach: str = "nhpp"):
 
         super(LearningModel, self).__init__(
             x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim), device=device) - 1, requires_grad=False),
@@ -33,6 +33,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         # Set the prior function
         # self.__neg_log_prior = self.__set_prior( kernels=["rbf",]) # rbf periodic
+        self.__approach = approach
 
         # Set the correction function
         self.__correction_func = None
@@ -51,8 +52,8 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__writer = SummaryWriter("../experiments/logs/loss")
 
         # Order matters for sequential learning
-        self.__learning_param_names = [ ["x0", "v",], ["reg_params"], ]  # , ["reg_params"] ["bins_rwidth"] "reg_params" "bins_rwidth" ["v", "bins_rwidth"], ["beta"], ["bins_rwidth"]
-        self.__learning_param_epoch_weights = [1, 2,  ]  # 2
+        self.__learning_param_names = [ ["x0", "v",], ["reg_params"], ["beta"] ]  # , ["reg_params"] ["bins_rwidth"] "reg_params" "bins_rwidth" ["v", "bins_rwidth"], ["beta"], ["bins_rwidth"]
+        self.__learning_param_epoch_weights = [1, 2, 1 ]  # 2
 
         self.__add_prior = False  # Do not change
 
@@ -225,7 +226,12 @@ class LearningModel(BaseModel, torch.nn.Module):
 
     def forward(self, time_seq_list, node_pairs):
 
-        nll = self.get_negative_log_likelihood(time_seq_list, node_pairs)
+        if self.__approach == "nhpp":
+            nll = self.get_negative_log_likelihood(time_seq_list, node_pairs)
+        elif self.__approach == "survival":
+            nll = self.get_survival_log_likelihood(time_seq_list, node_pairs)
+        else:
+            raise ValueError("Invalid approach name!")
 
         nll += self.__prior_weight * self.__neg_log_prior(nodes=torch.unique(node_pairs))
 
@@ -299,13 +305,6 @@ class LearningModel(BaseModel, torch.nn.Module):
             (2.0 / self._scale_const) * torch.rand(size=(1,)) - (1.0 / self._scale_const), requires_grad=False
         )
 
-    # def __set_prior(self, kernels: list = None):
-    #
-    #
-    #
-    #     # Return the prior function
-    #     return partial(self.__neg_log_prior, cholesky=True)
-
     def __set_gradients(self, beta_grad=None, x0_grad=None, v_grad=None, bins_rwidth_grad=None, reg_params_grad=None):
 
         if beta_grad is not None:
@@ -326,31 +325,6 @@ class LearningModel(BaseModel, torch.nn.Module):
             for name, param in self.named_parameters():
                 if '__prior' in name:
                     param.requires_grad = reg_params_grad
-
-    # def __correction(self, centering=None, rotation=None):
-    #
-    #     with torch.no_grad():
-    #
-    #         if centering:
-    #             x0_m = torch.mean(self._x0, dim=0, keepdim=True)
-    #             self._x0 -= x0_m
-    #
-    #             v_m = torch.mean(self._v, dim=1, keepdim=True)
-    #             self._v -= v_m
-    #
-    #             # v_m = self._v.sum(dim=0, keepdim=True).sum(dim=1, keepdim=True) / (self._v.shape[0]*self._v.shape[1])
-    #             # self._v -= v_m
-    #
-    #         if rotation:
-    #             U, S, _ = torch.linalg.svd(
-    #                 torch.vstack((self._x0, self._v.view(-1, self._v.shape[2]))),
-    #                 full_matrices=False
-    #             )
-    #
-    #             temp = torch.mm(U, torch.diag(S))
-    #
-    #             self._x0.data = temp[:self._x0.shape[0], :]
-    #             self._v.data = temp[self._x0.shape[0]:, :].view(self._v.shape[0], self._v.shape[1], self._v.shape[2])
 
     def get_rbf_kernel(self, time_mat):
 
@@ -482,104 +456,3 @@ class LearningModel(BaseModel, torch.nn.Module):
         params['_seed'] = self._seed
 
         return params
-
-    # def get_beta_kernel(self, bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
-    #             get_inv: bool = True, cholesky: bool=True):
-    #
-    #     # Compute the inverse of kernel/covariance matrix
-    #     time_mat = bin_centers1 - bin_centers2.transpose(0, 1)
-    #     # time_mat = time_mat.squeeze(0)
-    #
-    #     kernel = self.get_rbf_kernel(time_mat=time_mat)
-    #
-    #     # Add a noise term
-    #     kernel += torch.eye(n=kernel.shape[0], m=kernel.shape[1]) * (self.__prior_kernel_noise_sigma**2)
-    #
-    #     # If the inverse of the kernel is not required, return only the kernel matrix
-    #     if get_inv is False:
-    #         return kernel
-    #
-    #     # Compute the inverse
-    #     if cholesky:
-    #         # print("=", self.__prior_rbf_l**2, self.__prior_rbf_sigma**2)
-    #         # print(kernel)
-    #         inv_kernel = torch.cholesky_inverse(torch.linalg.cholesky(kernel))
-    #     else:
-    #         inv_kernel = torch.linalg.inv(kernel)
-    #
-    #     return kernel, inv_kernel
-    #
-    # def beta_prior(self, nodes):
-    #
-    #     # Get the number of bin size
-    #     bin_num = self.get_num_of_bins()
-    #
-    #     # Get the bin bounds
-    #     bounds = self.get_bins_bounds()
-    #
-    #     # Get the middle time points of the bins for TxT covariance matrix
-    #     middle_bounds = (bounds[1:] + bounds[:-1]).view(1, bin_num) / 2.
-    #
-    #     # K: T x T matrix
-    #     K, inv_K = self.get_beta_kernel(
-    #         bin_centers1=middle_bounds, bin_centers2=middle_bounds, cholesky=True
-    #     )
-    #
-    #     p = torch.matmul(self._beta[:, nodes].transpose(0, 1), torch.matmul(inv_K, self._beta[:, nodes])).sum()
-    #     # Compute the log-determinant of the product
-    #     final_dim = K.shape[0]
-    #     log_det_kernel = torch.logdet(K)
-    #
-    #     log_prior_likelihood = -0.5 * (final_dim * math.log(2 * math.pi) + log_det_kernel + p)
-    #
-    #     return -log_prior_likelihood.squeeze(0)
-
-    # def __set_prior(self, name="", **kwargs):
-    #
-    #     if name.lower() == "gp_kron":
-    #
-    #         # Parameter initialization
-    #         self.__prior_kernel_noise_sigma = torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False)
-    #
-    #         # Set the parameters required for the construction of the matrix A
-    #         self.__prior_A_kernel_names = kwargs["kernels"]
-    #         for kernel_name in self.__prior_A_kernel_names:
-    #
-    #             if kernel_name == "rbf":
-    #
-    #                 self.__prior_rbf_sigma = torch.nn.Parameter(200 * torch.rand(size=(1,)) - 100, requires_grad=False)
-    #                 self.__prior_rbf_l = 2*torch.nn.Parameter(2 * torch.rand(size=(1,)) , requires_grad=False)
-    #
-    #             elif kernel_name == "periodic":
-    #
-    #                 self.__prior_periodic_sigma = torch.nn.Parameter(200 * torch.rand(size=(1,)) - 100, requires_grad=False)
-    #                 self.__prior_periodic_p = torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False)
-    #                 self.__prior_periodic_l = torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False)
-    #
-    #             else:
-    #
-    #                 raise ValueError("Invalid kernel name")
-    #
-    #         # Set the parameters required for the construction of the matrix B
-    #         # self._prior_B_L is lower triangular matrix with positive diagonal entries
-    #         self.__prior_B_L = torch.nn.Parameter(
-    #             torch.tril(200 * torch.rand(size=(self._dim, self._dim)) - 100, diagonal=-1) +
-    #             100*torch.diag(torch.rand(size=(self._dim, ))),
-    #             requires_grad=False
-    #         )
-    #
-    #         # Set the parameters required for the construction of the matrix C
-    #         self.__prior_C_Q_dim = 2
-    #         self.__prior_C_Q = torch.nn.Parameter(
-    #             2 * torch.rand(size=(self._nodes_num, self.__prior_C_Q_dim)) - 1, requires_grad=False
-    #         )
-    #         self.__prior_C_lambda = torch.nn.Parameter(
-    #             2 * torch.rand(size=(1, )) - 1, requires_grad=False
-    #         )
-    #
-    #         # Return the prior function
-    #         return partial(self.__neg_log_prior, cholesky=True)
-    #
-    #     else:
-    #
-    #         raise ValueError("Invalid prior name!")

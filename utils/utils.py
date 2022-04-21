@@ -2,6 +2,27 @@ import torch
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 import numpy as np
+import math
+import os
+
+class Constants:
+    def __init__(self):
+
+        self.eps = 1e-6
+        self.inf = 1e+6
+        self.pi = torch.tensor([math.pi])
+
+
+const = Constants()
+
+
+BASE_FOLDER = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
+
+
+def str2int(text):
+
+    return int(sum(map(ord, text)) % 1e6)
+
 #
 # def collate_fn(batch):
 #     node_pairs = []
