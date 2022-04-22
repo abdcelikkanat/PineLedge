@@ -44,50 +44,99 @@ class AlgebraicEquivalence(unittest.TestCase):
 
         self.assertEqualTensor(true_vect, pred_vect)
 
-    def test_mixed_kron_triple_matrix_vector_prod_one_side(self):
-        '''
+    # def test_mixed_kron_triple_matrix_vector_prod_one_side(self):
+    #     '''
+    #
+    #     '''
+    #
+    #     B = torch.rand(size=(12, 9))
+    #     C = torch.rand(size=(3, 3))
+    #     D = torch.rand(size=(3, 4))
+    #     V = torch.rand(size=(9, 4, 3))
+    #
+    #     v = utils.vectorize(V).flatten()
+    #     true_vect = torch.kron(B, torch.kron(C, D)) @ v
+    #
+    #     pred_vect = utils.vectorize(torch.matmul(
+    #             utils.vectorize(torch.matmul(torch.matmul(D.unsqueeze(0), V), C.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
+    #             B.transpose(0, 1)
+    #         ))
+    #
+    #     self.assertEqualTensor(true_vect, pred_vect)
 
-        '''
-
-        A = torch.rand(size=(12, 9))
-        B = torch.rand(size=(3, 3))
-        C = torch.rand(size=(3, 4))
-        V = torch.rand(size=(9, 4, 3))
-
-        v = utils.vectorize(V).flatten()
-        true_vect = torch.kron(A, torch.kron(B, C)) @ v
-
-        pred_vect = utils.vectorize(torch.matmul(
-                utils.vectorize(torch.matmul(torch.matmul(C.unsqueeze(0), V), B.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
-                A.transpose(0, 1)
-            ))
-
-        self.assertEqualTensor(true_vect, pred_vect)
+    # def test_mixed_kron_triple_matrix_vector_prod(self):
+    #     '''
+    #     Claim: vect(V)^t ( B \kron C \kron D ) vect(V) is equal to vec(V)^t vec( (DVC^t)B^t )
+    #
+    #     '''
+    #
+    #     B = torch.rand(size=(12, 9))
+    #     C = torch.rand(size=(3, 3))
+    #     D = torch.rand(size=(3, 4))
+    #     V = torch.rand(size=(9, 4, 3))
+    #
+    #     v = utils.vectorize(V).flatten()
+    #     true_vect = torch.matmul(torch.matmul(v, torch.kron(B, torch.kron(C, D))), v)
+    #
+    #     pred_vect = torch.matmul(
+    #         v,
+    #         utils.vectorize(torch.matmul(
+    #             utils.vectorize(torch.matmul(torch.matmul(D.unsqueeze(0), V), C.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
+    #             B.transpose(0, 1)
+    #         ))
+    #     )
+    #
+    #     self.assertEqualTensor(true_vect, pred_vect)
+    # def test_mixed_kron_triple_matrix_vector_prod(self):
+    #     '''
+    #     Claim: vect(V)^t ( B \kron C \kron D ) vect(V) is equal to vec(V)^t vec( (DVC^t)B^t )
+    #
+    #     '''
+    #
+    #     B = torch.randn(size=(11, 11))
+    #     C = torch.randn(size=(3, 3))
+    #     D = torch.rand(size=(4, 4))
+    #     V = torch.rand(size=(11, 3, 4))
+    #
+    #     v = utils.vectorize(V).flatten()
+    #     true_vect = torch.matmul(torch.matmul(v, torch.kron(B, torch.kron(C, D))), v)
+    #
+    #     print("x: ",  )
+    #     # pred_vect = torch.matmul(
+    #     #     v,
+    #     #     utils.vectorize(torch.matmul(
+    #     #         utils.vectorize(torch.matmul(torch.matmul(D.unsqueeze(0), V), C.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
+    #     #         B.transpose(0, 1)
+    #     #     ))
+    #     # )
+    #     pred_vect = v @ utils.vectorize( utils.vectorize((D.unsqueeze(0) @ V.transpose(1, 2) @ C).transpose(1, 2)).t() @ B.t() )
+    #     print(true_vect, pred_vect)
+    #
+    #     self.assertEqualTensor(true_vect, pred_vect)
 
     def test_mixed_kron_triple_matrix_vector_prod(self):
         '''
-        Claim: vect(V)^t ( A \kron B \kron C ) vect(V) is equal to vec(V)^t vec( (CVB^t)A^t )
+        Claim: vect(V)^t ( B \kron C \kron D ) vect(V) is equal to vec(V)^t vec( (DVC^t)B^t )
 
         '''
 
-        A = torch.rand(size=(12, 9))
-        B = torch.rand(size=(3, 3))
-        C = torch.rand(size=(3, 4))
-        V = torch.rand(size=(9, 4, 3))
+        B = torch.rand(size=(9, 9))
+        C = torch.randn(size=(3, 3))
+        D = torch.randn(size=(4, 4))
+        V = torch.rand(size=(9, 3, 4))
 
-        v = utils.vectorize(V).flatten()
-        true_vect = torch.matmul(torch.matmul(v, torch.kron(A, torch.kron(B, C))), v)
+        v = utils.vectorize(V.transpose(1, 2)).flatten()
+        true_vect = torch.matmul(torch.matmul(v, torch.kron(B, torch.kron(C, D))), v)
 
         pred_vect = torch.matmul(
             v,
             utils.vectorize(torch.matmul(
-                utils.vectorize(torch.matmul(torch.matmul(C.unsqueeze(0), V), B.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
-                A.transpose(0, 1)
+                utils.vectorize(torch.matmul(torch.matmul(D.unsqueeze(0), V.transpose(1, 2)), C.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
+                B.transpose(0, 1)
             ))
         )
 
         self.assertEqualTensor(true_vect, pred_vect)
-
 
 if __name__ == '__main__':
     unittest.main()
