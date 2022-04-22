@@ -16,12 +16,12 @@ import pickle as pkl
 # Set some paremeters
 dim = 2
 bins_num = 3 #3 #5
-pw = 1.0 #100000 #1.0  #1.0
-batch_size = 45 #70 #45  #1
+pw = 1e-6 #100000 #1.0  #1.0
+batch_size = 45 #45 #70 #45  #1
 learning_rate = 0.1
-epochs_num = 100 #100 #400  # 500
+epochs_num = 300 #100 #400  # 500
 steps_per_epoch = 5
-seed = utils.str2int("testing")  # all_events # survival_true_with_event # nhpp
+seed = utils.str2int("testing_cv_full")  # all_events # survival_true_with_event # nhpp
 verbose = True
 shuffle = True
 suffix = "" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"
@@ -48,20 +48,21 @@ anim_path = os.path.join(
 )
 
 # Load the dataset
-all_events = Events(seed=seed, batch_size=batch_size)
+all_events = Events(seed=seed)
 all_events.read(dataset_path)
-nodes_num = all_events.number_of_nodes()
 
 # Normalize the events
 all_events.normalize(init_time=0, last_time=1.0)
 
-# Data Loader
-data_loader = DataLoader(all_events, batch_size=1, shuffle=shuffle, collate_fn=utils.collate_fn)
+# Get the number of nodes
+nodes_num = all_events.number_of_nodes()
+
+data = all_events.get_pairs(), all_events.get_events()
 
 # Run the model
-lm = LearningModel(data_loader=data_loader, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1.,
+lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1.,
                    learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
-                   verbose=verbose, seed=seed, prior_weight=pw)
+                   verbose=verbose, seed=seed, pw=pw)
 
 # Load the model
 assert os.path.exists(model_path), "The model file does not exist!"

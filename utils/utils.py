@@ -81,6 +81,14 @@ def collate_fn(batch):
     # # return node_pairs, [torch.as_tensor(events)]
     # return node_pairs, events_list
 
+# def vectorize(x: torch.Tensor):
+#
+#     return x.flatten(-1)
+#
+#
+# def unvectorize(x: torch.Tensor, size):
+#
+#     return x.reshape((size[0], size[1], size[2]))
 
 def vectorize(x: torch.Tensor):
 

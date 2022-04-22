@@ -102,12 +102,12 @@ pairs=((sample_idx*N).unsqueeze(1)+sample_idx).reshape(-1).unsqueeze(0)#[sample_
 
 # random sample location matrix and mask
 
-sample_pair_mask = torch.sparse_coo_tensor(pairs.repeat(2,1), torch.ones(pairs.shape[1]), (Rows, Rows))
+# sample_pair_mask = torch.sparse_coo_tensor(pairs.repeat(2,1), torch.ones(pairs.shape[1]), (Rows, Rows))
 
 
 # total edges matrix in sparse N^2 x Projection
 
-sparse_edges=torch.sparse_coo_tensor(torch.cat((sparse_row.unsqueeze(0),torch.arange(events_t.shape[0]).unsqueeze(0)),0).long(), events_t, (Rows, events_t.shape[0]))
+# sparse_edges=torch.sparse_coo_tensor(torch.cat((sparse_row.unsqueeze(0),torch.arange(events_t.shape[0]).unsqueeze(0)),0).long(), events_t, (Rows, events_t.shape[0]))
 
 ## ADD constant c to the events so t=0 event survive and then substract it from valueC
 c=1

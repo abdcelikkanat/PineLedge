@@ -4,6 +4,7 @@ import torch
 from src.base import BaseModel
 from functools import partial
 from torch.utils.tensorboard import SummaryWriter
+from torch_sparse import spspmm
 from utils import mean_normalization
 import utils
 import time
@@ -11,9 +12,10 @@ import time
 
 class LearningModel(BaseModel, torch.nn.Module):
 
-    def __init__(self, data_loader, nodes_num, bins_num, dim, last_time: float,
-                 learning_rate: float, prior_weight: float = 1.0, epochs_num: int = 100, steps_per_epoch=10,
-                 device: torch.device = "cpu", verbose: bool = False, seed: int = 0, approach: str = "nhpp"):
+    def __init__(self, data, nodes_num, bins_num, dim, last_time: float,
+                 learning_rate: float, pw: float = 1.0, batch_size: float = None, epochs_num: int = 100,
+                 steps_per_epoch=10, device: torch.device = "cpu", verbose: bool = False, seed: int = 0,
+                 approach: str = "nhpp"):
 
         super(LearningModel, self).__init__(
             x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim), device=device) - 1, requires_grad=False),
@@ -26,10 +28,10 @@ class LearningModel(BaseModel, torch.nn.Module):
             seed=seed
         )
 
-        self._scale_const = 1e3
+        self._scale_const = 1.0 #1e3
         self.initialize_prior_params()
 
-        self.__data_loader = data_loader
+        self.__data = data
 
         # Set the prior function
         # self.__neg_log_prior = self.__set_prior( kernels=["rbf",]) # rbf periodic
@@ -42,7 +44,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__learning_rate = learning_rate
         self.__epochs_num = epochs_num
         self.__steps_per_epoch = steps_per_epoch
-        self.__prior_weight = prior_weight
+        self.__pw = pw
 
         #self.__optimizer = torch.optim.Adam(self.parameters(), lr=self.__learning_rate)
         self.__optimizer = None
@@ -56,6 +58,15 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__learning_param_epoch_weights = [1, 2, 1 ]  # 2
 
         self.__add_prior = False  # Do not change
+
+        self.__batch_size = self.get_number_of_nodes() if batch_size is None else batch_size
+        self.__events_pairs = torch.as_tensor(self.__data[0], dtype=torch.int, device=self.__device)
+        self.__events = self.__data[1]
+        self.__all_lengths = torch.as_tensor(list(map(len, self.__events)), dtype=torch.int, device=self.__device)
+        self.__all_events = torch.as_tensor([e for events in self.__events for e in events], dtype=torch.float, device=self.__device)
+        self.__all_pairs = torch.repeat_interleave(self.__events_pairs, self.__all_lengths, dim=0)
+        self.__sampling_weights = torch.ones(self.get_number_of_nodes())
+        self.__sparse_row = (self.__all_pairs[:, 0]*self.get_number_of_nodes())+self.__all_pairs[:,1]
 
     def learn(self, learning_type=None):
 
@@ -92,30 +103,6 @@ class LearningModel(BaseModel, torch.nn.Module):
         if self.__writer is not None:
             self.__writer.close()
 
-        print("Beta: ", self._beta)
-
-    def __sequential_learning(self):
-
-        # epoch_num_per_var = int(self.__epochs_num / len(self.__param_names))
-        epoch_cumsum = torch.cumsum(torch.as_tensor([0] + self.__param_epoch_weights), dim=0)
-        epoch_num_per_var = (self.__epochs_num * epoch_cumsum // torch.sum(torch.as_tensor(self.__param_epoch_weights))).type(torch.int)
-
-        for param_idx, param_names in enumerate(self.__param_names):
-
-            # Set the gradients
-            if type(param_names) is not list:
-                param_names = [param_names]
-
-            for pname in param_names:
-                self.__set_gradients(**{f"{pname}_grad": True})
-
-            # for epoch in range(param_idx * epoch_num_per_var,
-            #                    min(self.__epochs_num, (param_idx + 1) * epoch_num_per_var)):
-            for epoch in range(epoch_num_per_var[param_idx], epoch_num_per_var[param_idx+1]):
-                self.__train_one_epoch(
-                    epoch=epoch, correction_func=self.__correction_func
-                )
-
     def __alternating_learning(self):
 
         current_epoch = 0
@@ -140,50 +127,47 @@ class LearningModel(BaseModel, torch.nn.Module):
             # Iterate the parameter group id
             current_param_group_idx = (current_param_group_idx + 1) % len(self.__learning_param_epoch_weights)
 
-    def __alternating_learning_with_weight(self):
-
-        current_epoch = 0
-        current_param_group_idx = 0
-
-        const_val_list = [1e3, 1e2, 1e1, 1e0]
-        while current_epoch < self.__epochs_num:
-
-            self._scale_const = const_val_list[math.floor(current_epoch / (self.__epochs_num / len(const_val_list)))]
-            print(current_epoch, self._scale_const)
-            # Set the gradients to True
-            for param_name in self.__learning_param_names[current_param_group_idx]:
-                self.__set_gradients(**{f"{param_name}_grad": True})
-
-            # self.__optimizer = torch.optim.Adam(self.parameters(), lr=self.__learning_rate)
-
-            for _ in range(self.__learning_param_epoch_weights[current_param_group_idx]):
-
-                self.__train_one_epoch(epoch=current_epoch, correction_func=self.__correction_func, optimizer=self.__optimizer[current_param_group_idx])
-                current_epoch += 1
-
-            # Set the gradients to False
-            for param_name in self.__learning_param_names[current_param_group_idx]:
-                self.__set_gradients(**{f"{param_name}_grad": False})
-
-            # Iterate the parameter group id
-            current_param_group_idx = (current_param_group_idx + 1) % len(self.__learning_param_epoch_weights)
-
     def __train_one_epoch(self, epoch, optimizer, correction_func=None):
 
         init_time = time.time()
 
         average_epoch_loss = 0
         batch_num = 0
-        # for batch_node_pairs, batch_times_list, in self.__data_loader:
-        #
-        #     if batch_num == self.__steps_per_epoch:
-        #         break
+
         for _ in range(self.__steps_per_epoch):
 
             self.train()
 
-            batch_node_pairs, batch_times_list = next(iter(self.__data_loader))
-            batch_node_pairs, batch_times_list = batch_node_pairs.to(self._device), batch_times_list
+            sample_indices = torch.multinomial(self.__sampling_weights, self.__batch_size, replacement=False)
+            sample_pairs = ((sample_indices*self.get_number_of_nodes()).unsqueeze(1)+sample_indices).reshape(-1).unsqueeze(0)
+
+            c = 1
+            indexC, valueC = spspmm(
+                indexA=sample_pairs.repeat(2, 1).long(),
+                valueA=torch.ones(sample_pairs.shape[1]),
+                indexB=torch.cat((self.__sparse_row.unsqueeze(0), torch.arange(self.__all_events.shape[0]).unsqueeze(0)), 0).long(),
+                valueB=(self.__all_events + c),
+                m=self.get_number_of_nodes()**2,
+                k=self.get_number_of_nodes()**2,
+                n=self.__all_events.shape[0],
+                coalesced=True
+            )
+            valueC = valueC - c
+
+            unique_indexC0, inverse_indices = torch.unique(indexC[0], return_inverse=True)
+
+            sample_i = torch.div(unique_indexC0, self.get_number_of_nodes(), rounding_mode='floor').unsqueeze(1)
+            sample_j = (unique_indexC0 % self.get_number_of_nodes()).unsqueeze(1)
+
+            batch_node_pairs = torch.hstack((sample_i, sample_j)).t()
+            batch_times_list = [[] for _ in range(len(unique_indexC0))] # ---> This part will be fixed!
+            for i in range(len(valueC)):
+                batch_times_list[inverse_indices[i]].append(valueC[i])
+
+            # print(batch_node_pairs)
+            # print(self.__events[0])
+            # batch_node_pairs, batch_times_list = next(iter(self.__data))
+            # batch_node_pairs, batch_times_list = batch_node_pairs.to(self._device), batch_times_list
 
             # Forward pass
             batch_loss_sum = self.forward(
@@ -233,79 +217,38 @@ class LearningModel(BaseModel, torch.nn.Module):
         else:
             raise ValueError("Invalid approach name!")
 
-        nll += self.__prior_weight * self.__neg_log_prior(nodes=torch.unique(node_pairs))
-
-        # for name, param in self.named_parameters():
-        #     if param.requires_grad:
-        #         print(name)
-        # print("x0: ", self._x0.grad, self._x0[0, :])
-        # print(self.__prior_weight, self.get_negative_log_likelihood(time_seq_list, node_pairs), self.__neg_log_prior(nodes=torch.unique(node_pairs)))
+        nll += self.__neg_log_prior(nodes=torch.unique(node_pairs))
 
         return nll
 
     def initialize_prior_params(self, kernel_names: list = None):
         #: float = 1e3,
         # Initialize the prior terms
-        # Set the parameters required for the construction of the matrix A
-        self.__kernel_names = ["rbf"] if kernel_names is None else kernel_names
-
-        for kernel_name in self.__kernel_names:
-
-            if kernel_name == "rbf":
-                # Output variance
-                if len(self.__kernel_names) > 1:
-                    self.__prior_rbf_sigma = torch.nn.Parameter(
-                        2 * self._scale_const * torch.rand(size=(1,)) - self._scale_const, requires_grad=False
-                    )
-                # Length scale
-                self.__prior_rbf_l = torch.nn.Parameter(
-                    2 * torch.rand(size=(1,)) - 1, requires_grad=False
-                )
-
-            elif kernel_name == "periodic":
-                # Output variance
-                if len(self.__kernel_names) > 1:
-                    self.__prior_periodic_sigma = torch.nn.Parameter(
-                        2 * self._scale_const * torch.rand(size=(1,)) - self._scale_const, requires_grad=False
-                    )
-                # Period
-                self.__prior_periodic_p = torch.nn.Parameter(
-                    2 * torch.rand(size=(1,)) - 1, requires_grad=False
-                )
-                # Length scale
-                self.__prior_periodic_l = torch.nn.Parameter(
-                    2 * torch.rand(size=(1,)) - 1, requires_grad=False
-                )
-
-            else:
-
-                raise ValueError("Invalid kernel name")
-
-        # Set the noise term for the kernel
-        self.__prior_kernel_noise = torch.nn.Parameter(2 * self._scale_const * torch.rand(size=(1,)) - 1, requires_grad=False)
 
         # Set the parameters required for the construction of the matrix B
-        # self._prior_B_L is lower triangular matrix with positive diagonal entries
-        self.__prior_B_L = torch.nn.Parameter(
-            torch.tril(2 * self._scale_const * torch.rand(size=(self._dim, self._dim)) - self._scale_const, diagonal=-1) +
-            self._scale_const * torch.diag(torch.rand(size=(self._dim,))),
-            requires_grad=False
+        self.__prior_B_sigma = torch.nn.Parameter(
+            2 * self._scale_const * torch.rand(size=(1,)) - self._scale_const, requires_grad=False
         )
+
         # Set the noise term for the kernel
         self.__prior_B_noise = torch.nn.Parameter(
-            (2.0 / self._scale_const) * torch.rand(size=(1,)) - (1.0 / self._scale_const), requires_grad=False
+            2 * self._scale_const * torch.rand(size=(1,)) - 1, requires_grad=False
         )
 
-        # Set the parameters required for the construction of the matrix C
-        self.__prior_C_Q_dim = 2
+        # Set the parameters required for the construction of the matrix D
+        self.__prior_C_Q_dim = 3
         self.__prior_C_Q = torch.nn.Parameter(
-            (2.0 / self._scale_const) * torch.rand(size=(self._nodes_num, self.__prior_C_Q_dim)) - (1.0 / self._scale_const), requires_grad=False
+            (2.0 / self._scale_const) * torch.rand(size=(self._nodes_num, self.__prior_C_Q_dim)) - (
+                        1.0 / self._scale_const), requires_grad=False
         )
-        self.__prior_C_lambda = torch.nn.Parameter(
+
+        # Set the parameters required for the construction of the matrix D
+        # Set the noise term for the kernel
+        self.__prior_D_noise = torch.nn.Parameter(
             (2.0 / self._scale_const) * torch.rand(size=(1,)) - (1.0 / self._scale_const), requires_grad=False
         )
 
-    def __set_gradients(self, beta_grad=None, x0_grad=None, v_grad=None, bins_rwidth_grad=None, reg_params_grad=None):
+    def __set_gradients(self, beta_grad=None, x0_grad=None, v_grad=None, reg_params_grad=None):
 
         if beta_grad is not None:
             self._beta.requires_grad = beta_grad
@@ -316,9 +259,6 @@ class LearningModel(BaseModel, torch.nn.Module):
         if v_grad is not None:
             self._v.requires_grad = v_grad
 
-        if bins_rwidth_grad is not None:
-            self._bins_rwidth.requires_grad = bins_rwidth_grad
-
         if reg_params_grad is not None:
 
             # Set the gradients of the prior function
@@ -326,39 +266,23 @@ class LearningModel(BaseModel, torch.nn.Module):
                 if '__prior' in name:
                     param.requires_grad = reg_params_grad
 
-    def get_rbf_kernel(self, time_mat):
+    def __get_rbf_kernel(self, time_mat, sigma):
 
-        kernel = torch.exp(-0.5 * torch.div(time_mat**2, self.__prior_rbf_l**2))
-
-        if len(self.__kernel_names) > 1:
-            kernel = (self.__prior_kernel_sigma ** 2) * kernel
+        kernel = torch.exp(-0.5 * torch.div(time_mat**2, sigma**2))
 
         return kernel
 
-    def get_periodic_kernel(self, time_mat):
-
-        kernel = torch.exp(
-            -2 * torch.sin(math.pi * torch.abs(time_mat) / self.__prior_periodic_p)**2 / (self.__prior_periodic_l**2)
-        )
-        if len(self.__kernel_names) > 1:
-            kernel = (self.__prior_periodic_sigma**2) * kernel
-            
-        return kernel
-
-    def __get_A(self, bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
+    def __get_B(self, bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
                 get_inv: bool = True, cholesky: bool = True):
 
         # Compute the inverse of kernel/covariance matrix
         time_mat = bin_centers1 - bin_centers2.transpose(1, 2)
         time_mat = time_mat.squeeze(0)
 
-        kernel = 0.
-        for kernel_name in self.__kernel_names:
-            kernel_func = getattr(self, 'get_'+kernel_name+'_kernel')
-            kernel += kernel_func(time_mat=time_mat)
+        kernel = self.__get_rbf_kernel(time_mat=time_mat, sigma=self.__prior_B_sigma)
 
         # Add a noise term
-        kernel += torch.eye(n=kernel.shape[0], m=kernel.shape[1]) * (self.__prior_kernel_noise**2)
+        kernel = kernel + torch.eye(n=kernel.shape[0], m=kernel.shape[1]) * (self.__prior_B_noise**2)
 
         # If the inverse of the kernel is not required, return only the kernel matrix
         if not get_inv:
@@ -372,33 +296,27 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         return kernel, inv_kernel
 
-    def __get_B(self):
-
-        # B: D x D matrix -> self._prior_B_L: D x D lower triangular matrix
-        # B = self._prior_B_L @ self._prior_B_L.t()
-        B_L = torch.tril(self.__prior_B_L, diagonal=-1) + torch.diag(torch.diag(self.__prior_B_L)**2)
-
-        # Definition of inverse
-        inv_B = torch.cholesky_inverse(B_L) + torch.eye(n=self._dim, m=self._dim) * (self.__prior_B_noise**2)
-        # Add a noise
-        # inv_B += torch.eye(n=inv_B.shape[0], m=inv_B.shape[1]) * (self.__prior_B_noise**2)
-
-        return inv_B
-
-    def __get_C(self, nodes = None):
+    def __get_C(self, nodes=None):
 
         # C: N x N matrix
-        if nodes is None:
-            C_Q = self.__prior_C_Q
-            nodes_num = C_Q.shape[0]
-        else:
-            C_Q = self.__prior_C_Q[nodes, :]
-            nodes_num = len(nodes)
+        nodes_num = self.get_number_of_nodes() if nodes is None else len(nodes)
 
-        C_D = torch.diag(self.__prior_C_lambda.expand(nodes_num) ** 2)
+        Q = self.__prior_C_Q
+        R = torch.linalg.inv(torch.eye(self.__prior_C_Q.shape[1]) + self.__prior_C_Q.t() @ self.__prior_C_Q)
 
-        inv_C = C_D + C_Q @ C_Q.t()
+        if nodes is not None:
+            Q = torch.index_select(self.__prior_C_Q, dim=0, index=nodes)
+
+        inv_C = torch.eye(nodes_num) - Q @ R @ Q.t()
+
         return inv_C
+
+    def __get_D(self):
+
+        # D: D x D matrix
+        inv_D = torch.eye(n=self._dim, m=self._dim) / (1.0 + self.__prior_D_noise**2)
+
+        return inv_D
 
     def __neg_log_prior(self, nodes, cholesky=True):
 
@@ -411,32 +329,41 @@ class LearningModel(BaseModel, torch.nn.Module):
         # Get the middle time points of the bins for TxT covariance matrix
         middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, bin_num) / 2.
 
-        # A: T x T matrix
-        A, inv_A = self.__get_A(
+        # B x B matrix
+        B, inv_B = self.__get_B(
             bin_centers1=middle_bounds, bin_centers2=middle_bounds, cholesky=cholesky
         )
 
-        # B: D x D matrix
-        inv_B = self.__get_B()
-
-        # C: len(nodes) x len(nodes) matrix
+        # len(nodes) x len(nodes) matrix
         inv_C = self.__get_C(nodes=nodes)
 
-        # Compute the product, v^t ( A kron B kron C )^-1 v,  in an efficient way
-        batch_v = mean_normalization(self._v)[:, nodes, :]
+        # D x D matrix
+        inv_D = self.__get_D()
+
+        # Compute the product, v^t ( B kron C kron D )^-1 v,  in an efficient way
+        batch_v = torch.index_select(mean_normalization(self._v), dim=1, index=nodes)
         v_vect = utils.vectorize(batch_v).flatten()
-        p = v_vect @ utils.vectorize(
-            utils.vectorize((inv_C.unsqueeze(0) @ batch_v) @ inv_B.t().unsqueeze(0)).t() @ inv_A.t()
+
+        # inv_K = (1.0 / self.__pw**2) * torch.kron(torch.kron(inv_B.contiguous(), inv_C.contiguous()), inv_D.contiguous())
+        # p = v_vect @ inv_K @ v_vect
+
+        p = (1.0 / self.__pw**2) * torch.matmul(
+            v_vect,
+            utils.vectorize(torch.matmul(
+                utils.vectorize(torch.matmul(torch.matmul(inv_D.unsqueeze(0), batch_v.transpose(1, 2)),
+                                             inv_C.transpose(0, 1).unsqueeze(0))).transpose(0, 1),
+                inv_B.transpose(0, 1)
+            ))
         )
 
         # Compute the log-determinant of the product
         final_dim = len(nodes) * self.get_num_of_bins() * self._dim
-        log_det_kernel = (final_dim / self.get_num_of_bins()) * torch.logdet(A) \
-                         - (final_dim / self._dim) * torch.logdet(inv_B) \
-                         - (final_dim / len(nodes)) * torch.logdet(inv_C)
+        log_det_kernel = (final_dim / self.get_num_of_bins()) * torch.logdet(B) \
+                         - (final_dim / self._dim) * torch.logdet(inv_C) \
+                         - (final_dim / len(nodes)) * torch.logdet(inv_D)
 
         log_prior_likelihood = -0.5 * (final_dim * math.log(2 * math.pi) + log_det_kernel + p)
-        #log_prior_likelihood = torch.logdet(A) + torch.logdet(inv_B)
+
         return -log_prior_likelihood.squeeze(0)
 
     def get_hyperparameters(self):
