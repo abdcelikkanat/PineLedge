@@ -16,12 +16,12 @@ import pickle as pkl
 # Set some paremeters
 dim = 2
 bins_num = 3 #3 #5
-pw = 1e-6 #100000 #1.0  #1.0
+pw = 1.0  #100000 #1.0  #1.0
 batch_size = 45 #45 #70 #45  #1
 learning_rate = 0.1
-epochs_num = 300 #100 #400  # 500
+epochs_num = 310 #100 #400  # 500
 steps_per_epoch = 5
-seed = utils.str2int("testing_cv_full")  # all_events # survival_true_with_event # nhpp
+seed = utils.str2int("testing_prior")  # all_events # survival_true_with_event # nhpp
 verbose = True
 shuffle = True
 suffix = "" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"

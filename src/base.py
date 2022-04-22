@@ -325,25 +325,18 @@ class BaseModel(torch.nn.Module):
         it = time.time()
         nll = 0
         integral_term = -self.get_intensity_integral(node_pairs=node_pairs).sum()
-        # print(f"Integral term: {time.time() - it}")
 
         it = time.time()
         non_integral_term = 0
         for idx in range(node_pairs.shape[1]):
-            # it = time.time()
-            # node_pairs is a matrix of size 2 x batch size matrix
+
             nodes_pair = node_pairs[:, idx].view(2, 1)
             times_list = time_seq_list[idx]
-            # if len(times_list) == 0:
-            #     raise ValueError("STOP")
-            # if len(times_list) > 0:
+
             non_integral_term += torch.sum(self.get_log_intensity(times_list=torch.as_tensor(times_list, device=self._device), node_pairs=nodes_pair))
-            # nll += torch.sum(self.get_log_intensity(times_list=times_list, node_pairs=nodes_pair))
-            # nll += integral_term[idx]
-        # print(f"Non-integral term: {time.time() - it}")
-        # print(integral_term, non_integral_term)
+
         return -(integral_term + non_integral_term)
-        # return -nll
+
 
     def get_survival_log_likelihood(self, time_seq_list: list, node_pairs: torch.tensor):
 

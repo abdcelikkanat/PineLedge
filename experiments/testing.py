@@ -17,9 +17,9 @@ bins_num = 3
 pw = 1.0
 batch_size = 45 #45  #1
 learning_rate = 0.1
-epochs_num = 300  # 500
+epochs_num = 311  # 500
 steps_per_epoch = 5
-seed = utils.str2int("testing_batching")
+seed = utils.str2int("testing_prior")
 verbose = True
 shuffle = True
 
