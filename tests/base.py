@@ -19,13 +19,43 @@ class BaseTest(unittest.TestCase, BaseModel):
         np.random.seed(seed=seed)
         torch.manual_seed(seed=seed)
 
+    # def test_xt(self):
+    #
+    #     computed_xt = self.get_xt(
+    #         times_list=torch.as_tensor([0, 1, 2, 3, 4]),
+    #         x0=torch.as_tensor([[-1, 0], [1, 0]]),
+    #         v=torch.as_tensor([[[2.0, 0], [-2.0, 0]], [[-3.0, 0], [3.0, 0]]]),
+    #         bin_bounds=torch.as_tensor([0, 2, 4])
+    #     )
+    #
+    #     correct_xt = torch.as_tensor(
+    #         [
+    #             [
+    #                 [-1, 0], [1, 0]
+    #             ],
+    #             [
+    #                 [1.0, 0], [-1.0, 0]
+    #             ],
+    #             [
+    #                 [3.0, 0], [-3.0, 0]
+    #             ],
+    #             [
+    #                 [0, 0], [0, 0]
+    #             ],
+    #             [
+    #                 [-3, 0], [3, 0]
+    #             ]
+    #         ]
+    #     )
+    #
+    #     self.assertEqualTensor(correct_xt, computed_xt)
+
     def test_xt(self):
 
         computed_xt = self.get_xt(
-            times_list=torch.as_tensor([0, 1, 2, 3, 4]),
-            x0=torch.as_tensor([[-1, 0], [1, 0]]),
-            v=torch.as_tensor([[[2.0, 0], [-2.0, 0]], [[-3.0, 0], [3.0, 0]]]),
-            bin_bounds=torch.as_tensor([0, 2, 4])
+            events_times_list=torch.as_tensor([0, 1, 2, 3, 4]),
+            x0=torch.as_tensor([[-1, 0],]),
+            v=torch.as_tensor([[[2.0, 0], [-2.0, 0]], ]),
         )
 
         correct_xt = torch.as_tensor(

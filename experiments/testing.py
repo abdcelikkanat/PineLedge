@@ -14,10 +14,10 @@ else:
 # Set some paremeters
 dim = 2
 bins_num = 3
-pw = 1.0
+pw = 100
 batch_size = 45 #45  #1
 learning_rate = 0.1
-epochs_num = 311  # 500
+epochs_num = 310  # 500
 steps_per_epoch = 5
 seed = utils.str2int("testing_prior")
 verbose = True

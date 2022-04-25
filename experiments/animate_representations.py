@@ -16,7 +16,7 @@ import pickle as pkl
 # Set some paremeters
 dim = 2
 bins_num = 3 #3 #5
-pw = 1.0  #100000 #1.0  #1.0
+pw = 100  #100000 #1.0  #1.0
 batch_size = 45 #45 #70 #45  #1
 learning_rate = 0.1
 epochs_num = 310 #100 #400  # 500

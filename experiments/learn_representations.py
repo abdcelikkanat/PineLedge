@@ -34,7 +34,7 @@ model_path = os.path.join(
 )
 
 # Load the dataset
-all_events = Events(seed=seed, batch_size=batch_size)
+all_events = Events(seed=seed,)
 all_events.read(dataset_path)
 nodes_num = all_events.number_of_nodes()
 
@@ -45,9 +45,9 @@ all_events.normalize(init_time=0, last_time=1.0)
 data_loader = DataLoader(all_events, batch_size=1, shuffle=shuffle, collate_fn=utils.collate_fn)
 
 # Run the model
-lm = LearningModel(data_loader=data_loader, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1.,
+lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1.,
                    learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
-                   verbose=verbose, seed=seed, prior_weight=pw)
+                   verbose=verbose, seed=seed, pw=pw)
 
 
 assert not os.path.exists(model_path), "The file exists!"

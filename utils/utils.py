@@ -18,6 +18,10 @@ const = Constants()
 
 BASE_FOLDER = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
+EPS = 1e-6
+INF = 1e+6
+PI = math.pi
+LOG2PI = math.log(2*PI)
 
 def str2int(text):
 
