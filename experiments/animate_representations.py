@@ -16,12 +16,12 @@ import pickle as pkl
 # Set some paremeters
 dim = 2
 bins_num = 3 #3 #5
-pw = 100  #100000 #1.0  #1.0
+pw = 1e7  #100000 #1.0  #1.0
 batch_size = 45 #45 #70 #45  #1
 learning_rate = 0.1
-epochs_num = 310 #100 #400  # 500
+epochs_num = 50 #100 #400  # 500
 steps_per_epoch = 5
-seed = utils.str2int("testing_prior")  # all_events # survival_true_with_event # nhpp
+seed = utils.str2int("testing")  # all_events # survival_true_with_event # nhpp
 verbose = True
 shuffle = True
 suffix = "" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"
@@ -83,7 +83,11 @@ with open(node2group_filepath, "rb") as f:
     node2group_data = pkl.load(f)
 node2group, group2node = node2group_data["node2group"], node2group_data["group2node"]
 
-embs_pred = lm.get_xt(times_list=times_list).detach().numpy()
+embs_pred = lm.get_xt(
+    events_times_list=torch.cat([times_list]*lm.get_number_of_nodes()),
+    x0=torch.repeat_interleave(lm.get_x0(), repeats=len(times_list), dim=0),
+    v=torch.repeat_interleave(lm.get_v(), repeats=len(times_list), dim=1)
+).reshape((lm.get_number_of_nodes(), len(times_list),  lm.get_dim())).transpose(0, 1).detach().numpy()
 node2color = [node2group[idx] for idx in range(nodes_num)]
 anim = Animation(embs_pred, fps=12, node2color=node2color)
 anim.save(anim_path)
