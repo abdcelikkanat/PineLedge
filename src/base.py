@@ -95,13 +95,12 @@ class BaseModel(torch.nn.Module):
             torch.cumsum(v * self._bin_width, dim=0)
         )).view(-1, self._dim)
 
-        # print(x0.shape, v.shape, events_bin_indices, cum_displacement.shape)
-        xt = x0 + torch.index_select(cum_displacement, dim=0, index=events_bin_indices*v.shape[1] + torch.arange(len(events_bin_indices)))
+        xt = x0 + torch.index_select(cum_displacement, dim=0, index=events_bin_indices * v.shape[1] + torch.arange(len(events_bin_indices)))
         # Finally, add the the displacement on the interval that nodes lay on
         # print(v.shape, len(events_bin_indices))
         xt += torch.mul(
             residual_time.unsqueeze(1),
-            torch.index_select(v.view(-1, self._dim), dim=0, index=events_bin_indices*v.shape[1] + torch.arange(len(events_bin_indices)))
+            torch.index_select(v.view(-1, self._dim), dim=0, index=events_bin_indices * v.shape[1] + torch.arange(len(events_bin_indices)))
         )
 
         return xt

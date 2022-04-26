@@ -17,10 +17,10 @@ else:
 dim = 2
 K = 2
 bins_num = 3
-pw = 1
+pw = 1e3
 batch_size = 4  #1
 learning_rate = 0.1
-epochs_num = 100  # 500
+epochs_num = 20  # 500
 steps_per_epoch = 5
 seed = 123
 verbose = True
@@ -65,13 +65,13 @@ data = all_events.get_pairs(), all_events.get_events()
 lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, k=K, last_time=1., batch_size=batch_size,
                    learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
                    verbose=verbose, seed=seed, pw=pw)
-
-s = lm.get_xt(
-    events_times_list=torch.as_tensor([0.73,]),
-    x0=torch.as_tensor([[0.3, 0.6]]),
-    v=torch.as_tensor([[[0.2, 0.2]], [[0.2, 0.2]], [[0.2, 0.2]]]),
-)
-print("> ", s)
+#
+# s = lm.get_xt(
+#     events_times_list=torch.as_tensor([0.73,]),
+#     x0=torch.as_tensor([[0.3, 0.6]]),
+#     v=torch.as_tensor([[[0.2, 0.2]], [[0.2, 0.2]], [[0.2, 0.2]]]),
+# )
+# print("> ", s)
 
 lm.learn()
 
