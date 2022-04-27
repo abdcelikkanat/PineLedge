@@ -15,13 +15,13 @@ import pickle as pkl
 
 # Set some paremeters
 dim = 2
-bins_num = 3 #3 #5
-pw = 1e7  #100000 #1.0  #1.0
-batch_size = 45 #45 #70 #45  #1
-learning_rate = 0.1
-epochs_num = 50 #100 #400  # 500
+bins_num = 3
+pw = 1
+batch_size = 45  #1
+learning_rate = 0.01
+epochs_num = 300  # 500
 steps_per_epoch = 5
-seed = utils.str2int("testing")  # all_events # survival_true_with_event # nhpp
+seed = utils.str2int("testing_seq")  # all_events # survival_true_with_event # nhpp
 verbose = True
 shuffle = True
 suffix = "" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"

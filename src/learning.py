@@ -40,7 +40,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         # Set the correction function
         self.__correction_func = None
 
-        self.__learning_procedure = "alt"  #"seq"
+        self.__learning_procedure = "seq"  #"seq"
         self.__learning_rate = learning_rate
         self.__epochs_num = epochs_num
         self.__steps_per_epoch = steps_per_epoch
@@ -54,8 +54,8 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__writer = SummaryWriter("../experiments/logs/loss")
 
         # Order matters for sequential learning
-        self.__learning_param_names = [["x0", "v", "reg_params"]]  # , ["reg_params"] ["bins_rwidth"] "reg_params" "bins_rwidth" ["v", "bins_rwidth"], ["beta"], ["bins_rwidth"]
-        self.__learning_param_epoch_weights = [1, ]  # 2
+        self.__learning_param_names = [["x0", "v", ], ["beta"], ["reg_params"],]  # , ["reg_params"] ["bins_rwidth"] "reg_params" "bins_rwidth" ["v", "bins_rwidth"], ["beta"], ["bins_rwidth"]
+        self.__learning_param_epoch_weights = [1, 1, 1]  # 2
 
         self.__add_prior = False  # Do not change
 
@@ -78,32 +78,76 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         learning_type = self.__learning_procedure if learning_type is None else learning_type
 
-        # Learns the parameters sequentially
-        if learning_type != "alt":
-            raise NotImplementedError("A learning method other than alternation minimization is not implemented!")
-
         # Initialize optimizer list
         self.__optimizer = []
 
-        # For each parameter group, add an optimizer
-        for param_group in self.__learning_param_names:
+        if learning_type == "seq":
 
-            # Set the gradients to True
-            for param_name in param_group:
-                self.__set_gradients(**{f"{param_name}_grad": True})
-            # Add a new optimizer
-            self.__optimizer.append(
-                torch.optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=self.__learning_rate)
-            )
-            # Set the gradients to False
-            for param_name in param_group:
-                self.__set_gradients(**{f"{param_name}_grad": False})
+            # For each parameter group, add an optimizer
+            for param_group in self.__learning_param_names:
 
-        # Run alternating minimization
-        self.__alternating_learning()
+                # Set the gradients to True
+                for param_name in param_group:
+                    self.__set_gradients(**{f"{param_name}_grad": True})
+
+                # Add a new optimizer
+                self.__optimizer.append(
+                    torch.optim.Adam(self.parameters(), lr=self.__learning_rate)
+                )
+                # Set the gradients to False
+                for param_name in param_group:
+                    self.__set_gradients(**{f"{param_name}_grad": False})
+
+            # Run alternating minimization
+            self.__sequential_learning()
+
+        elif learning_type == "alt":
+
+            # For each parameter group, add an optimizer
+            for param_group in self.__learning_param_names:
+
+                # Set the gradients to True
+                for param_name in param_group:
+                    self.__set_gradients(**{f"{param_name}_grad": True})
+                # Add a new optimizer
+                self.__optimizer.append(
+                    torch.optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=self.__learning_rate)
+                )
+                # Set the gradients to False
+                for param_name in param_group:
+                    self.__set_gradients(**{f"{param_name}_grad": False})
+
+            # Run alternating minimization
+            self.__alternating_learning()
+
+        else:
+
+            raise NotImplementedError("A learning method other than alternation minimization is not implemented!")
 
         if self.__writer is not None:
             self.__writer.close()
+
+    def __sequential_learning(self):
+
+        current_epoch = 0
+        current_param_group_idx = 0
+        group_epoch_counts = (self.__epochs_num * torch.as_tensor(self.__learning_param_epoch_weights, dtype=torch.float) / sum(self.__learning_param_epoch_weights)).type(torch.int)
+
+        while current_epoch < self.__epochs_num:
+
+            # Set the gradients to True
+            for param_name in self.__learning_param_names[current_param_group_idx]:
+                self.__set_gradients(**{f"{param_name}_grad": True})
+
+            # Repeat the optimization of the group parameters given weight times
+            for _ in range(group_epoch_counts[current_param_group_idx]):
+                self.__train_one_epoch(
+                    epoch_num=current_epoch, optimizer=self.__optimizer[current_param_group_idx]
+                )
+                current_epoch += 1
+
+            # Iterate the parameter group id
+            current_param_group_idx += 1
 
     def __alternating_learning(self):
 
@@ -135,8 +179,8 @@ class LearningModel(BaseModel, torch.nn.Module):
         init_time = time.time()
 
         average_batch_loss = 0
-        for _ in range(self.__steps_per_epoch):
-            average_batch_loss += self.__train_one_batch(optimizer)
+        for batch_num in range(self.__steps_per_epoch):
+            average_batch_loss += self.__train_one_batch(epoch_num, batch_num, optimizer)
 
         # Get the average epoch loss
         epoch_loss = average_batch_loss / float(self.__steps_per_epoch)
@@ -147,7 +191,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         # if self.__writer is not None:
         #     self.__writer.add_scalar(tag="Loss/train", scalar_value=average_epoch_loss, global_step=epoch)
 
-    def __train_one_batch(self, optimizer):
+    def __train_one_batch(self, epoch_num, batch_num, optimizer):
 
         self.train()
 
@@ -171,47 +215,13 @@ class LearningModel(BaseModel, torch.nn.Module):
         )
         valueC = valueC - const_value
 
-        # unique_indexC0, inverse_indices = torch.unique(indexC[0], return_inverse=True)
-        # sample_i = torch.div(unique_indexC0, self.get_number_of_nodes(), rounding_mode='floor').unsqueeze(1)
-        # sample_j = (unique_indexC0 % self.get_number_of_nodes()).unsqueeze(1)
-        # batch_node_pairs = torch.hstack((sample_i, sample_j)).t()
-
         sample_i = torch.div(indexC[0], self.get_number_of_nodes(), rounding_mode='floor').unsqueeze(1)
         sample_j = (indexC[0] % self.get_number_of_nodes()).unsqueeze(1)
         batch_node_pairs = torch.hstack((sample_i, sample_j)).t()
 
-        # batch_times_list = [[] for _ in range(len(unique_indexC0))]  # ---> This part will be fixed!
-        # for i in range(len(valueC)):
-        #     batch_times_list[inverse_indices[i]].append(valueC[i])
-
-        # sample_indices = torch.multinomial(self.__sampling_weights, self.__batch_size, replacement=False)
-        # sample_pairs = ((sample_indices*self.get_number_of_nodes()).unsqueeze(1)+sample_indices).reshape(-1).unsqueeze(0)
-        # c = 1
-        # indexC, valueC = spspmm(
-        #     indexA=sample_pairs.repeat(2, 1).long(),
-        #     valueA=torch.ones(sample_pairs.shape[1]),
-        #     indexB=torch.cat((self.__sparse_row.unsqueeze(0), torch.arange(self.__all_events.shape[0]).unsqueeze(0)), 0).long(),
-        #     valueB=(self.__all_events + c),
-        #     m=self.get_number_of_nodes()**2,
-        #     k=self.get_number_of_nodes()**2,
-        #     n=self.__all_events.shape[0],
-        #     coalesced=True
-        # )
-        # valueC = valueC - c
-        #
-        # unique_indexC0, inverse_indices = torch.unique(indexC[0], return_inverse=True)
-        #
-        # sample_i = torch.div(unique_indexC0, self.get_number_of_nodes(), rounding_mode='floor').unsqueeze(1)
-        # sample_j = (unique_indexC0 % self.get_number_of_nodes()).unsqueeze(1)
-        #
-        # batch_node_pairs = torch.hstack((sample_i, sample_j)).t()
-        # batch_times_list = [[] for _ in range(len(unique_indexC0))]  # ---> This part will be fixed!
-        # for i in range(len(valueC)):
-        #     batch_times_list[inverse_indices[i]].append(valueC[i])
-
         # Forward pass
         average_batch_loss = self.forward(
-            nodes=sampled_nodes, event_times=valueC, event_node_pairs=batch_node_pairs,
+            epoch_num=epoch_num, batch_num=batch_num, nodes=sampled_nodes, event_times=valueC, event_node_pairs=batch_node_pairs,
         ) / self.__batch_size
 
         if not math.isfinite(average_batch_loss):
@@ -229,7 +239,8 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         return average_batch_loss
 
-    def forward(self, nodes: torch.Tensor, event_times: torch.Tensor, event_node_pairs: torch.Tensor):
+    def forward(self, epoch_num: int, batch_num: int, nodes: torch.Tensor, event_times: torch.Tensor,
+                event_node_pairs: torch.Tensor):
 
         nll = 0
         if self.__approach == "nhpp":
@@ -242,11 +253,18 @@ class LearningModel(BaseModel, torch.nn.Module):
             raise ValueError("Invalid approach name!")
 
         # Add prior
-        # print(utils.vectorize(self._v).flatten())
-        # p = -self.__m.log_prob(utils.vectorize(mean_normalization(self._v)).flatten()).sum()
-        p = self.__neg_log_prior(nodes=nodes)
-        # print(nll, p)
-        nll += p
+        # nll += ((epoch_num*self.__batch_size + batch_num) / (self.__epochs_num * self.__batch_size + 1)) * self.__neg_log_prior(nodes=nodes)
+
+        # self.__pw = (1e6) ** (1 - ((epoch_num*self.__batch_size + batch_num) / (self.__epochs_num * self.__batch_size + 1)))
+
+        if self.__learning_procedure == "alt":
+            nll += self.__neg_log_prior(nodes=nodes)
+
+        # print(self.__learning_procedure, self.__prior_sigma.requires_grad)
+        if self.__learning_procedure == "seq": #and self.__prior_sigma.requires_grad is True:
+            nll += self.__neg_log_prior(nodes=nodes)
+
+
         return nll
 
     def initialize_prior_params(self):

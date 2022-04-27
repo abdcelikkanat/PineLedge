@@ -16,11 +16,11 @@ else:
 # Set some paremeters
 dim = 2
 K = 2
-bins_num = 10
-pw = 1e3 #1e3
+bins_num = 3
+pw = 1e3
 batch_size = 4  #1
 learning_rate = 0.1
-epochs_num = 20  # 500
+epochs_num = 120  # 500
 steps_per_epoch = 5
 seed = 123
 verbose = True

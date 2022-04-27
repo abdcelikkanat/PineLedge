@@ -9,12 +9,12 @@ from src.events import Events
 # Set some paremeters
 dim = 2
 bins_num = 3
-pw = 1e7
+pw = 1
 batch_size = 45  #1
-learning_rate = 0.1
-epochs_num = 50  # 500
+learning_rate = 0.01
+epochs_num = 300  # 500
 steps_per_epoch = 5
-seed = utils.str2int("testing")
+seed = utils.str2int("testing_seq")
 verbose = True
 shuffle = True
 
@@ -54,7 +54,7 @@ lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, l
 # assert not os.path.exists(model_path), "The file exists!"
 
 # Save the model
-os.makedirs(model_folder)
+# os.makedirs(model_folder)
 
 lm.learn()
 torch.save(lm.state_dict(), model_path)

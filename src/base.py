@@ -313,7 +313,7 @@ class BaseModel(torch.nn.Module):
 
         non_integral_term = self.get_log_intensity(times_list=event_times, node_pairs=event_node_pairs).sum()
 
-        return -(integral_term + non_integral_term)
+        return -( non_integral_term + integral_term)
         # return non_integral_term
         # return integral_term
 
