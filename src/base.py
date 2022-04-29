@@ -13,7 +13,8 @@ class BaseModel(torch.nn.Module):
     Description
     '''
     def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, last_time: float,
-                 bins_num=None, device: torch.device = "cpu", verbose: bool = False, seed: int = 0):
+                 bins_num=None, node_pairs_mask: torch.Tensor = None, device: torch.device = "cpu",
+                 verbose: bool = False, seed: int = 0):
         '''
 
         :param x0: initial position tensor of size N x D
@@ -45,6 +46,8 @@ class BaseModel(torch.nn.Module):
 
         # Set the seed value for reproducibility
         self._set_seed()
+
+        self.__node_pairs_mask = node_pairs_mask
 
     def _check_input_params(self):
 
@@ -97,7 +100,6 @@ class BaseModel(torch.nn.Module):
 
         xt = x0 + torch.index_select(cum_displacement, dim=0, index=events_bin_indices * v.shape[1] + torch.arange(len(events_bin_indices)))
         # Finally, add the the displacement on the interval that nodes lay on
-        # print(v.shape, len(events_bin_indices))
         xt += torch.mul(
             residual_time.unsqueeze(1),
             torch.index_select(v.view(-1, self._dim), dim=0, index=events_bin_indices * v.shape[1] + torch.arange(len(events_bin_indices)))
@@ -150,11 +152,17 @@ class BaseModel(torch.nn.Module):
 
     def get_log_intensity(self, times_list: torch.Tensor, node_pairs: torch.Tensor, distance: str = "squared_euc"):
 
+        # Mask given node pairs
+        if self.__node_pairs_mask is not None:
+            non_idx = torch.cdist(node_pairs.T.float(), self.__node_pairs_mask.T.float()).nonzero(as_tuple=True)[0]
+            idx = torch.unique(non_idx, sorted=True)
+            node_pairs = node_pairs[:, idx]
+
         # Get pairwise distances
         intensities = -self.get_pairwise_distances(times_list=times_list, node_pairs=node_pairs, distance=distance)
         # Add an additional axis for beta parameters for time dimension
-        intensities += self._beta * 2
-        #intensities += (self._beta*2).expand(len(times_list), node_pairs.shape[1]) #intensities += (self._beta[node_pairs[0]] + self._beta[node_pairs[1]]).expand(len(times_list), node_pairs.shape[1])
+        intensities += torch.index_select(self._beta, dim=0, index=node_pairs[0]) + \
+                       torch.index_select(self._beta, dim=0, index=node_pairs[1])
 
         return intensities
 
@@ -177,13 +185,19 @@ class BaseModel(torch.nn.Module):
             [[nodes[i], nodes[j]] for i in range(batch_size) for j in range(i+1, batch_size)],
             dtype=torch.int, device=self._device
         ).t()
+        # Mask given node pairs
+        if self.__node_pairs_mask is not None:
+            non_idx = torch.cdist(unique_node_pairs.T.float(), self.__node_pairs_mask.T.float()).nonzero(as_tuple=True)[0]
+            idx = torch.unique(non_idx, sorted=True)
+            unique_node_pairs = unique_node_pairs[:, idx]
 
         # Common variables
         delta_x0 = torch.index_select(x0, dim=0, index=unique_node_pairs[0]) - \
                    torch.index_select(x0, dim=0, index=unique_node_pairs[1])
         delta_v = torch.index_select(v, dim=1, index=unique_node_pairs[0]) - \
                   torch.index_select(v, dim=1, index=unique_node_pairs[1])
-        beta_ij = beta*2  #beta[node_pairs[0]] + beta[node_pairs[1]]
+        beta_ij = torch.index_select(beta, dim=0, index=unique_node_pairs[0]) + \
+                  torch.index_select(beta, dim=0, index=unique_node_pairs[1])
 
         # if len(node_pairs.shape) == 1:
         #     delta_x0 = delta_x0.view(1, self._dim)
@@ -314,8 +328,6 @@ class BaseModel(torch.nn.Module):
         non_integral_term = self.get_log_intensity(times_list=event_times, node_pairs=event_node_pairs).sum()
 
         return -( non_integral_term + integral_term)
-        # return non_integral_term
-        # return integral_term
 
     def get_survival_log_likelihood(self, time_seq_list: list, node_pairs: torch.tensor):
 

@@ -15,20 +15,21 @@ import pickle as pkl
 
 # Set some paremeters
 dim = 2
+K = 4
 bins_num = 3
-pw = 1
+pw = 1e3
 batch_size = 45  #1
 learning_rate = 0.01
 epochs_num = 300  # 500
 steps_per_epoch = 5
-seed = utils.str2int("testing_seq")  # all_events # survival_true_with_event # nhpp
+seed = utils.str2int("testing_dyad_removal")  # all_events # survival_true_with_event # nhpp testing_seq2
 verbose = True
 shuffle = True
 suffix = "" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"
 
 ###
 dataset_name = "three_clusters_fp_sizes=15_20_10" #f"three_clusters_sizes=15_20_10" # sbm_survival
-model_name = f"{dataset_name}_D={dim}_B={bins_num}_pw={pw}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"+suffix
+model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pw={pw}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
 
 # Define dataset and model path
 dataset_folder = os.path.join(
@@ -60,7 +61,7 @@ nodes_num = all_events.number_of_nodes()
 data = all_events.get_pairs(), all_events.get_events()
 
 # Run the model
-lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1.,
+lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, k=K, last_time=1.,
                    learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
                    verbose=verbose, seed=seed, pw=pw)
 

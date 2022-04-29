@@ -13,17 +13,17 @@ import copy
 
 class Events(Dataset):
 
-    def __init__(self, events=None, seed=0):
+    def __init__(self, data=(None, None), nodes_num=None, seed=0):
 
         super().__init__()
 
-        self.__nodes_num = None
-        self.__nodes = None
+        self.__nodes_num = nodes_num
         self.__events_dict = None
 
-        self.__events = None
-        self.__pairs = None
+        self.__events = data[0]
+        self.__pairs = data[1]
 
+        self.__nodes = None
         # Set the seed value
         self.__set_seed(seed=seed)
 
@@ -75,9 +75,13 @@ class Events(Dataset):
 
         return self.__nodes_num
 
-    # def number_of_events(self):
-    #
-    #     return sum(len(self.__events[pair[0]][pair[1]]) for pair in self.pairs())
+    def number_of_event_pairs(self):
+
+        return len(self.__events)
+
+    def number_of_total_events(self):
+
+        return sum(len(events) for events in self.__events)
 
     def nodes(self):
 
@@ -123,6 +127,25 @@ class Events(Dataset):
         for i in range(len(self.__events)):
             for j in range(len(self.__events[i])):
                 self.__events[i][j] = (self.__events[i][j] - min_event_time) / (max_event_time - min_event_time)
+
+    def remove_events(self, num):
+
+        chosen_indices = np.random.choice(len(self.__events), size=(num,), replace=False)
+
+        residual_events = []
+        residual_pairs = []
+        removed_events = []
+        removed_pairs = []
+
+        for idx in range(len(self.__events)):
+            if idx in chosen_indices:
+                removed_events.append(self.__events[idx])
+                removed_pairs.append(self.__pairs[idx])
+            else:
+                residual_events.append(self.__events[idx])
+                residual_pairs.append(self.__pairs[idx])
+
+        return Events(data=(residual_events, residual_pairs)), Events(data=(removed_events, removed_pairs))
 
     # def get_first_event_time(self):
     #
