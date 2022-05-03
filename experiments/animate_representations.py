@@ -17,19 +17,19 @@ import pickle as pkl
 dim = 2
 K = 4
 bins_num = 3
-pw = 1e3
+pw = 1e2
 batch_size = 45  #1
-learning_rate = 0.01
+learning_rate = 0.001
 epochs_num = 300  # 500
 steps_per_epoch = 5
-seed = utils.str2int("testing_dyad_removal")  # all_events # survival_true_with_event # nhpp testing_seq2
+seed = utils.str2int("testing_dyad_sequential_dec")  # all_events # survival_true_with_event # nhpp testing_seq2
 verbose = True
 shuffle = True
-suffix = "" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"
+suffix = f"_percent={0.1}" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"
 
 ###
-dataset_name = "three_clusters_fp_sizes=15_20_10" #f"three_clusters_sizes=15_20_10" # sbm_survival
-model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pw={pw}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
+dataset_name = f"three_clusters_fp_sizes=15_20_10_beta=0" #f"three_clusters_sizes=15_20_10" # sbm_survival
+model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pw={pw}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}{suffix}"
 
 # Define dataset and model path
 dataset_folder = os.path.join(
@@ -70,7 +70,7 @@ assert os.path.exists(model_path), "The model file does not exist!"
 lm.load_state_dict(torch.load(model_path))
 
 
-times_list = torch.linspace(0, 1.0, 100)
+frame_times = torch.linspace(0, 1.0, 100)
 # Ground truth animation
 # bm = BaseModel(x0=x0, v=v, beta=beta, last_time=last_time, bins_rwidth=bins_rwidth)
 # embs_gt = bm.get_xt(times_list=times_list*last_time).detach().numpy()
@@ -85,10 +85,10 @@ with open(node2group_filepath, "rb") as f:
 node2group, group2node = node2group_data["node2group"], node2group_data["group2node"]
 
 embs_pred = lm.get_xt(
-    events_times_list=torch.cat([times_list]*lm.get_number_of_nodes()),
-    x0=torch.repeat_interleave(lm.get_x0(), repeats=len(times_list), dim=0),
-    v=torch.repeat_interleave(lm.get_v(), repeats=len(times_list), dim=1)
-).reshape((lm.get_number_of_nodes(), len(times_list),  lm.get_dim())).transpose(0, 1).detach().numpy()
+    events_times_list=torch.cat([frame_times]*lm.get_number_of_nodes()),
+    x0=torch.repeat_interleave(lm.get_x0(), repeats=len(frame_times), dim=0),
+    v=torch.repeat_interleave(lm.get_v(), repeats=len(frame_times), dim=1)
+).reshape((lm.get_number_of_nodes(), len(frame_times),  lm.get_dim())).transpose(0, 1).detach().numpy()
 node2color = [node2group[idx] for idx in range(nodes_num)]
-anim = Animation(embs_pred, fps=12, node2color=node2color)
+anim = Animation(embs_pred, data=data, fps=12, node2color=node2color, frame_times=frame_times.numpy())
 anim.save(anim_path)

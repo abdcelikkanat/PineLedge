@@ -17,7 +17,7 @@ else:
 dim = 2
 K = 2
 bins_num = 3
-pw = 1e3
+pw = 1e5
 batch_size = 4  #1
 learning_rate = 0.1
 epochs_num = 120  # 500
@@ -77,7 +77,7 @@ lm.learn()
 
 if visualization:
 
-    times_list = torch.linspace(0, 1.0, 100)
+    frame_times = torch.linspace(0, 1.0, 100)
     # Ground truth animation
     # bm = BaseModel(x0=x0, v=v, beta=beta, last_time=last_time, bins_rwidth=bins_rwidth)
     # embs_gt = bm.get_xt(times_list=times_list*last_time).detach().numpy()
@@ -92,12 +92,13 @@ if visualization:
     node2group, group2node = node2group_data["node2group"], node2group_data["group2node"]
 
     embs_pred = lm.get_xt(
-        events_times_list=torch.cat([times_list]*lm.get_number_of_nodes()),
-        x0=torch.repeat_interleave(lm.get_x0(), repeats=len(times_list), dim=0),
-        v=torch.repeat_interleave(lm.get_v(), repeats=len(times_list), dim=1)
-    ).reshape((lm.get_number_of_nodes(), len(times_list),  lm.get_dim())).transpose(0, 1).detach().numpy()
+        events_times_list=torch.cat([frame_times]*lm.get_number_of_nodes()),
+        x0=torch.repeat_interleave(lm.get_x0(), repeats=len(frame_times), dim=0),
+        v=torch.repeat_interleave(lm.get_v(), repeats=len(frame_times), dim=1)
+    ).reshape((lm.get_number_of_nodes(), len(frame_times),  lm.get_dim())).transpose(0, 1).detach().numpy()
     # embs_pred = embs_pred.
     print(embs_pred.shape)
     node2color = [node2group[idx] for idx in range(nodes_num)]
-    anim = Animation(embs_pred, fps=12, node2color=node2color)
+    anim = Animation(embs_pred, fps=12, node2color=node2color,
+                     data=data, frame_times=frame_times.numpy())
     anim.save(anim_path)

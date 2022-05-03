@@ -2,7 +2,6 @@ import random
 import numpy as np
 import torch
 import utils
-from utils import const
 from utils import mean_normalization
 from torch.nn.functional import pdist
 import time
@@ -13,7 +12,7 @@ class BaseModel(torch.nn.Module):
     Description
     '''
     def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, last_time: float,
-                 bins_num=None, node_pairs_mask: torch.Tensor = None, device: torch.device = "cpu",
+                 bins_num: int = None, node_pairs_mask: torch.Tensor = None, device: torch.device = "cpu",
                  verbose: bool = False, seed: int = 0):
         '''
 
@@ -87,10 +86,11 @@ class BaseModel(torch.nn.Module):
 
         assert len(events_times_list) == x0.shape[0] and x0.shape[0] == v.shape[1], print( len(events_times_list), x0.shape, v.shape)
 
-        events_times_list[events_times_list == 1] = 1 - utils.EPS
+        # events_times_list[events_times_list == self._last_time] = self._last_time - utils.EPS
         # Compute the event indices and residual times
         events_bin_indices = torch.div(events_times_list, self._bin_width, rounding_mode='floor').type(torch.int)
         residual_time = events_times_list % self._bin_width
+        events_bin_indices[events_bin_indices == self._bins_num] = self._bins_num - 1
 
         # Compute the total displacements for each time-intervals and append a zero column to get rid of indexing issues
         cum_displacement = torch.cat((
@@ -215,11 +215,11 @@ class BaseModel(torch.nn.Module):
         norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
         # norm_v: a matrix of bins_counts x len(node_pairs)
         norm_delta_v = torch.norm(delta_v, p=2, dim=2, keepdim=False)
-        inv_norm_delta_v = 1.0 / (norm_delta_v + const.eps)
+        inv_norm_delta_v = 1.0 / (norm_delta_v + utils.EPS)
         delta_xt_v = (delta_xt * delta_v).sum(dim=2, keepdim=False)
         r = delta_xt_v * inv_norm_delta_v
 
-        term0 = 0.5 * torch.sqrt(const.pi).to(self._device) * inv_norm_delta_v
+        term0 = 0.5 * torch.sqrt(torch.as_tensor(utils.PI, device=self._device)).to(self._device) * inv_norm_delta_v
         # term1 = torch.exp( beta_ij.unsqueeze(0) + r**2 - norm_delta_xt**2 )
         term1 = torch.exp(beta_ij.unsqueeze(0) + r ** 2 - norm_delta_xt ** 2)
         term2_u = torch.erf(bin_bounds[1:].expand(norm_delta_v.shape[1], len(bin_bounds)-1).t()*norm_delta_v + r)
@@ -300,12 +300,12 @@ class BaseModel(torch.nn.Module):
             norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
             # norm_v: a matrix of bins_counts x len(node_pairs)
             norm_delta_v = torch.norm(delta_v.index_select(0, time_indices), p=2, dim=2, keepdim=False)
-            inv_norm_delta_v = 1.0 / (norm_delta_v + const.eps)
+            inv_norm_delta_v = 1.0 / (norm_delta_v + utils.EPS)
             # print(delta_xt.shape, delta_v[time_indices, :, :].shape)
             delta_xt_v = (delta_xt * delta_v.index_select(0, time_indices)).sum(dim=2, keepdim=False)
             r = delta_xt_v * inv_norm_delta_v
 
-            term0 = 0.5 * torch.sqrt(const.pi).to(self._device) * inv_norm_delta_v
+            term0 = 0.5 * torch.sqrt(utils.PI).to(self._device) * inv_norm_delta_v
             # term1 = torch.exp( beta_ij.unsqueeze(0) + r**2 - norm_delta_xt**2 )
             term1 = torch.exp(beta_ij.unsqueeze(0) + r ** 2 - norm_delta_xt ** 2)
             term2_u = torch.erf(all_bounds[1:].expand(norm_delta_v.shape[1], len(all_bounds)-1).t()*norm_delta_v + r)

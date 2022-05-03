@@ -2,20 +2,23 @@ import torch
 import numpy as np
 from src.nhpp import NHPP
 from src.base import BaseModel
-from utils import const
 import pickle as pkl
+from utils import *
 
 
 class ConstructionModel(BaseModel):
 
-    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, last_time: float, bins_rwidth: int or torch.Tensor, seed: int = 0):
+    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, last_time: float,
+                 bins_num: int, device: torch.device = "cpu", verbose: bool = False, seed: int = 0):
 
         super(ConstructionModel, self).__init__(
             x0=x0,
             v=v,
             beta=beta,
-            bins_rwidth=bins_rwidth,
             last_time=last_time,
+            bins_num=bins_num,
+            device=device,
+            verbose=verbose,
             seed=seed
         )
 
@@ -28,7 +31,7 @@ class ConstructionModel(BaseModel):
         # Add the initial time point
         critical_points = []
 
-        for idx in range(self.get_num_of_bins()):
+        for idx in range(self._bins_num):
 
             interval_init_time = bin_bounds[idx]
             interval_last_time = bin_bounds[idx+1]
@@ -42,7 +45,7 @@ class ConstructionModel(BaseModel):
 
             # For the model containing only position and velocity
             # Find the point in which the derivative equal to 0
-            t = - np.dot(delta_idx_x, delta_idx_v) / (np.dot(delta_idx_v, delta_idx_v) + const.eps) + interval_init_time
+            t = - np.dot(delta_idx_x, delta_idx_v) / (np.dot(delta_idx_v, delta_idx_v) + utils.EPS) + interval_init_time
 
             if interval_init_time < t < interval_last_time:
                 critical_points.append(t)
@@ -57,17 +60,22 @@ class ConstructionModel(BaseModel):
         if nodes is not None:
             raise NotImplementedError("It must be implemented for given specific nodes!")
 
-        nodes = torch.arange(self._nodes_num)
-        node_pairs = torch.triu_indices(row=self._nodes_num, col=self._nodes_num, offset=1)
+        node_pairs = torch.triu_indices(row=self._nodes_num, col=self._nodes_num, offset=1, device=self._device)
 
         # Upper triangular matrix of lists
         events_time = {i: {j: [] for j in range(i+1, self._nodes_num)} for i in range(self._nodes_num-1)}
         # Get the positions at the beginning of each time bin for every node
-        x = self.get_xt(times_list=self.get_bins_bounds()[:-1])
+        x = self.get_xt(
+            events_times_list=self.get_bins_bounds()[:-1].repeat(self._nodes_num, ),
+            x0=torch.repeat_interleave(self._x0, repeats=self._bins_num, dim=0),
+            v=torch.repeat_interleave(self._v, repeats=self._bins_num, dim=1)
+        ).reshape((self._nodes_num, self._bins_num,  self._dim)).transpose(0, 1)
 
         for i, j in zip(node_pairs[0], node_pairs[1]):
             # Define the intensity function for each node pair (i,j)
-            intensity_func = lambda t: self.get_intensity(torch.as_tensor([t]), torch.as_tensor([[i], [j]])).item()
+            intensity_func = lambda t: self.get_intensity(
+                times_list=torch.as_tensor([t]), node_pairs=torch.as_tensor([[i], [j]])
+            ).item()
             # Get the critical points
             critical_points = self.__get_critical_points(i=i, j=j, x=x)
             # Simulate the src

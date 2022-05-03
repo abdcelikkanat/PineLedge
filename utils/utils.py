@@ -5,15 +5,15 @@ import numpy as np
 import math
 import os
 
-class Constants:
-    def __init__(self):
-
-        self.eps = 1e-6
-        self.inf = 1e+6
-        self.pi = torch.tensor([math.pi])
-
-
-const = Constants()
+# class Constants:
+#     def __init__(self):
+#
+#         self.eps = 1e-6
+#         self.inf = 1e+6
+#         self.pi = torch.tensor([math.pi])
+#
+#
+# const = Constants()
 
 
 BASE_FOLDER = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
@@ -23,9 +23,37 @@ INF = 1e+6
 PI = math.pi
 LOG2PI = math.log(2*PI)
 
+
 def str2int(text):
 
     return int(sum(map(ord, text)) % 1e6)
+
+
+def pair_iter(n, undirected=True):
+
+    if undirected:
+        for i in range(n):
+            for j in range(i+1, n):
+                yield i, j
+
+    else:
+
+        for i in range(n):
+            for j in range(i+1, n):
+                yield i, j
+
+
+def pairIdx2flatIdx(i, j, n, undirected=True):
+
+    if undirected:
+
+        return (n-1) * i - int(i*(i+1)/2) + (j-1)
+
+    else:
+
+        return i*n + j
+
+
 
 #
 # def collate_fn(batch):
