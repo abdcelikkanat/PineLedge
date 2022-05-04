@@ -15,7 +15,7 @@ class LearningModel(BaseModel, torch.nn.Module):
     def __init__(self, data, nodes_num, bins_num, dim, last_time: float, k: int = 5,
                  node_pairs_mask: torch.Tensor = None,
                  learning_rate: float = 0.1, pw: float = 1.0, batch_size: float = None, epochs_num: int = 100,
-                 steps_per_epoch=10, device: torch.device = "cpu", verbose: bool = False, seed: int = 0,
+                 steps_per_epoch=10, device=None , verbose: bool = False, seed: int = 0,
                  approach: str = "nhpp"):
 
         super(LearningModel, self).__init__(
