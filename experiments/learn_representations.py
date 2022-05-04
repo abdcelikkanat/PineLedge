@@ -26,9 +26,13 @@ seed = utils.str2int("testing_seq2")
 verbose = True
 shuffle = True
 
+
+# global control for device
 CUDA=True
+# availability for different devices
 avail_device="cuda:0" if torch.cuda.is_available() else "cpu"
 
+# choosing device and setting default tensor, meaning that each new tensor has a default device pointing to
 if (CUDA) and (avail_device=="cuda:0"):
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 else:

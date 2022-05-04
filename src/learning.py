@@ -29,7 +29,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             verbose=verbose,
             seed=seed
         )
-
+        print('Learning on device: ',device)
         self.__K = k
         self.initialize_prior_params()
 
