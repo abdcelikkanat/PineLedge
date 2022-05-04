@@ -19,6 +19,14 @@ seed = utils.str2int("testing_seq2")
 verbose = True
 shuffle = True
 
+CUDA=True
+avail_device="cuda:0" if torch.cuda.is_available() else "cpu"
+
+if (CUDA) and (avail_device=="cuda:0"):
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+else:
+    torch.set_default_tensor_type('torch.FloatTensor')
+
 ###
 dataset_name = f"three_clusters_fp_sizes=15_20_10"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pw={pw}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
@@ -49,13 +57,12 @@ data = all_events.get_pairs(), all_events.get_events()
 # Run the model
 lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, k=K, last_time=1.,
                    learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
-                   verbose=verbose, seed=seed, pw=pw)
+                   verbose=verbose, seed=seed, pw=pw,device = torch.device("cuda:0" if ((torch.cuda.is_available()) and CUDA) else "cpu"))
 
 
-# assert not os.path.exists(model_path), "The file exists!"
-
-# Save the model
-# os.makedirs(model_folder)
+try:
+    os.makedirs(model_folder)
+except: print('file already exists')
 
 lm.learn()
 torch.save(lm.state_dict(), model_path)
