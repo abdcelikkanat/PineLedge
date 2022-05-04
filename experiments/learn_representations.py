@@ -35,7 +35,7 @@ else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
 ###
-dataset_name = f"three_clusters_fp_sizes=15_20_10"
+dataset_name = f"three_clusters_sizes=15_20_10"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pw={pw}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
 
 # Define dataset and model path
