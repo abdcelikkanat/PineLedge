@@ -17,10 +17,10 @@ else:
 dim = 2
 K = 2
 bins_num = 3
-pw = 1e5
-batch_size = 4  #1
+prior_lambda = 1e5
+batch_size = 2  #1
 learning_rate = 0.1
-epochs_num = 120  # 500
+epochs_num = 600  # 500
 steps_per_epoch = 5
 seed = 123
 verbose = True
@@ -30,7 +30,7 @@ visualization = True
 suffix = ""
 
 dataset_name = "four_nodes_fp"
-model_name = f"{dataset_name}_D={dim}_B={bins_num}_k={K}_pw={pw}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"+suffix
+model_name = f"{dataset_name}_D={dim}_B={bins_num}_k={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"+suffix
 
 # Define dataset and model path
 dataset_folder = os.path.join(
@@ -62,9 +62,10 @@ nodes_num = all_events.number_of_nodes()
 data = all_events.get_pairs(), all_events.get_events()
 
 # Run the model
-lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, k=K, last_time=1., batch_size=batch_size,
+lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,  batch_size=batch_size, last_time=1.,
+                   prior_k=K, prior_lambda=prior_lambda,
                    learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
-                   verbose=verbose, seed=seed, pw=pw)
+                   verbose=verbose, seed=seed)
 #
 # s = lm.get_xt(
 #     events_times_list=torch.as_tensor([0.73,]),

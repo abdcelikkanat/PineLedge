@@ -15,7 +15,7 @@ learning_rate = 0.001
 epochs_num = 300  # 500
 steps_per_epoch = 5
 seed = utils.str2int("testing_dyad_sequential_dec")
-verbose = False
+verbose = True
 shuffle = True
 ####
 learn = True

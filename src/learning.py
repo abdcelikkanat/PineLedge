@@ -12,9 +12,10 @@ import time
 
 class LearningModel(BaseModel, torch.nn.Module):
 
-    def __init__(self, data, nodes_num, bins_num, dim, last_time: float, k: int = 5,
+    def __init__(self, data, nodes_num, bins_num, dim, last_time: float,
+                 prior_k: int = 4, prior_lambda: float = 1.0,
                  node_pairs_mask: torch.Tensor = None,
-                 learning_rate: float = 0.1, pw: float = 1.0, batch_size: float = None, epochs_num: int = 100,
+                 learning_rate: float = 0.1, batch_size: int = None, epochs_num: int = 100,
                  steps_per_epoch=10, device: torch.device = "cpu", verbose: bool = False, seed: int = 0,
                  approach: str = "nhpp"):
 
@@ -23,20 +24,23 @@ class LearningModel(BaseModel, torch.nn.Module):
             v=torch.nn.Parameter(2 * torch.rand(size=(bins_num, nodes_num, dim), device=device) - 1, requires_grad=False),
             beta=torch.nn.Parameter(0 * torch.rand(size=(nodes_num, ), device=device), requires_grad=False),
             bins_num=bins_num,
-            node_pairs_mask=node_pairs_mask,
             last_time=last_time,
+            prior_lambda=prior_lambda,
+            prior_sigma= torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False),
+            prior_B_sigma = torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False),
+            prior_C_Q = torch.nn.Parameter(torch.rand(size=(prior_k, nodes_num)), requires_grad=False),
+            node_pairs_mask=node_pairs_mask,
             device=device,
             verbose=verbose,
             seed=seed
         )
 
-        self.__K = k
-        self.initialize_prior_params()
+        # Latent community dimension required for the construction of matrix C
+        # self.__K = k
+        # self.initialize_prior_params()
 
         self.__data = data
 
-        # Set the prior function
-        # self.__neg_log_prior = self.__set_prior( kernels=["rbf",]) # rbf periodic
         self.__approach = approach
 
         # Set the correction function
@@ -46,9 +50,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__learning_rate = learning_rate
         self.__epochs_num = epochs_num
         self.__steps_per_epoch = steps_per_epoch
-        self.__pw = pw
 
-        #self.__optimizer = torch.optim.Adam(self.parameters(), lr=self.__learning_rate)
         self.__optimizer = None
 
         self.__verbose = verbose
@@ -68,13 +70,8 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__all_events = torch.as_tensor([e for events in self.__events for e in events], dtype=torch.float, device=self.__device)
         self.__all_pairs = torch.repeat_interleave(self.__events_pairs, self.__all_lengths, dim=0)
         self.__sampling_weights = torch.ones(self.get_number_of_nodes())
-        self.__sparse_row = (self.__all_pairs[:, 0]*self.get_number_of_nodes())+self.__all_pairs[:,1]
+        self.__sparse_row = (self.__all_pairs[:, 0] * self.get_number_of_nodes())+ self.__all_pairs[:, 1]
 
-        # Latent community dimension required for the construction of matrix C
-        self.__softplus = torch.nn.Softplus()
-
-        fd = self._bins_num * self.__batch_size * self.get_dim()
-        self.__m = torch.distributions.MultivariateNormal(torch.zeros(fd), self.__pw*torch.eye(fd))
 
     def learn(self, learning_type=None):
 
@@ -133,7 +130,10 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         current_epoch = 0
         current_param_group_idx = 0
-        group_epoch_counts = (self.__epochs_num * torch.as_tensor(self.__learning_param_epoch_weights, dtype=torch.float) / sum(self.__learning_param_epoch_weights)).type(torch.int)
+        group_epoch_counts = (self.__epochs_num * torch.cumsum(
+            torch.as_tensor([0] + self.__learning_param_epoch_weights, device=self._device, dtype=torch.float), dim=0
+        ) / sum(self.__learning_param_epoch_weights)).type(torch.int)
+        group_epoch_counts = group_epoch_counts[1:] - group_epoch_counts[:-1]
 
         while current_epoch < self.__epochs_num:
 
@@ -182,18 +182,31 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         average_batch_loss = 0
         for batch_num in range(self.__steps_per_epoch):
-            average_batch_loss += self.__train_one_batch(optimizer)
+            average_batch_loss += self.__train_one_batch(batch_num)
 
         # Get the average epoch loss
         epoch_loss = average_batch_loss / float(self.__steps_per_epoch)
 
+        if not math.isfinite(epoch_loss):
+            print(f"Epoch loss is {epoch_loss}, stopping training")
+            sys.exit(1)
+
         if self.__verbose and (epoch_num % 10 == 0 or epoch_num == self.__epochs_num - 1):
             print(f"| Epoch = {epoch_num} | Loss/train: {epoch_loss} | Epoch Elapsed time: {time.time() - init_time}")
+
+        # Set the gradients to 0
+        optimizer.zero_grad()
+
+        # Backward pass
+        epoch_loss.backward()
+
+        # Perform a step
+        optimizer.step()
 
         # if self.__writer is not None:
         #     self.__writer.add_scalar(tag="Loss/train", scalar_value=average_epoch_loss, global_step=epoch)
 
-    def __train_one_batch(self, optimizer):
+    def __train_one_batch(self, batch_num):
 
         self.train()
 
@@ -223,25 +236,12 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         # Forward pass
         average_batch_loss = self.forward(
-            nodes=sampled_nodes, event_times=valueC, event_node_pairs=batch_node_pairs,
+            nodes=sampled_nodes, event_times=valueC, event_node_pairs=batch_node_pairs, batch_num=batch_num
         ) / self.__batch_size
-
-        if not math.isfinite(average_batch_loss):
-            print(f"Batch loss is {average_batch_loss}, stopping training")
-            sys.exit(1)
-
-        # Set the gradients to 0
-        optimizer.zero_grad()
-
-        # Backward pass
-        average_batch_loss.backward()
-
-        # Perform a step
-        optimizer.step()
 
         return average_batch_loss
 
-    def forward(self, nodes: torch.Tensor, event_times: torch.Tensor, event_node_pairs: torch.Tensor):
+    def forward(self, nodes: torch.Tensor, event_times: torch.Tensor, event_node_pairs: torch.Tensor, batch_num: int):
 
         nll = 0
         if self.__approach == "nhpp":
@@ -255,29 +255,32 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         # Add prior
         if self.__learning_procedure == "alt":
-            nll = nll + self.__neg_log_prior(batch_nodes=nodes)
+            nll = nll + self.get_neg_log_prior(batch_nodes=nodes, batch_num=batch_num)
 
         if self.__learning_procedure == "seq":
-            nll = nll + self.__neg_log_prior(batch_nodes=nodes)
+            nll = nll + self.get_neg_log_prior(batch_nodes=nodes, batch_num=batch_num)
 
         return nll
 
-    def initialize_prior_params(self):
-
-        # Initialize the prior terms
-        self.__prior_sigma = torch.nn.Parameter(
-            2 * torch.rand(size=(1,)) - 1, requires_grad=False
-        )
-
-        # Set the parameters required for the construction of the matrix B
-        self.__prior_B_sigma = torch.nn.Parameter(
-            2 * torch.rand(size=(1,)) - 1, requires_grad=False
-        )
-
-        # Set the parameters required for the construction of the matrix C
-        self.__prior_C_Q = torch.nn.Parameter(
-            torch.rand(size=(self.__K, self._nodes_num)), requires_grad=False
-        )
+    # def initialize_prior_params(self):
+    #
+    #     # Initialize the prior terms
+    #     self.__prior_sigma = torch.nn.Parameter(
+    #         2 * torch.rand(size=(1,)) - 1, requires_grad=False
+    #     )
+    #
+    #     # Set the parameters required for the construction of the matrix B
+    #     self.__prior_B_sigma = torch.nn.Parameter(
+    #         2 * torch.rand(size=(1,)) - 1, requires_grad=False
+    #     )
+    #
+    #     # Set the parameters required for the construction of the matrix C
+    #     self.__prior_C_Q = torch.nn.Parameter(
+    #         torch.rand(size=(self.__K, self._nodes_num)), requires_grad=False
+    #     )
+    #
+    #     # Capacitance matrix
+    #     self.__R, self.__R_factor, self.__R_factor_inv = None, None, None
 
     def __set_gradients(self, beta_grad=None, x0_grad=None, v_grad=None, reg_params_grad=None):
 
@@ -294,66 +297,35 @@ class LearningModel(BaseModel, torch.nn.Module):
 
             # Set the gradients of the prior function
             for name, param in self.named_parameters():
-                if '__prior' in name:
+                if '_prior' in name:
                     param.requires_grad = reg_params_grad
 
-    def __get_B_factor(self, bin_centers1: torch.Tensor, bin_centers2: torch.Tensor):
-
-        time_mat = bin_centers1 - bin_centers2.transpose(1, 2)
-        time_mat = time_mat.squeeze(0)
-
-        B_sigma = self.__softplus(self.__prior_B_sigma)
-        kernel = torch.exp(-0.5 * torch.div(time_mat**2, B_sigma))
-
-        # Add a constant term to get rid of computational problems
-        kernel = kernel + utils.EPS*torch.eye(n=kernel.shape[0], m=kernel.shape[1])
-
-        # B x B lower triangular matrix
-        L = torch.linalg.cholesky(kernel)
-
-        return L
-
-    def __get_C_factor(self):
-
-        # K x N matrix
-        # return torch.eye(self.__prior_C_Q.shape[0], self.__prior_C_Q.shape[1])
-        return torch.softmax(self.__prior_C_Q, dim=0)
-
-    def __get_D_factor(self):
-
-        # D x D matrix
-        return torch.eye(self.get_dim())
-
-    def __capacitance_tril(self, W, d):
-        r"""
-        Computes Cholesky of I + W.T @ inv(D) @ W
-        """
-        m = W.size(-1)
-        Wt_Dinv = W.T / d.unsqueeze(-2)
-        K = torch.matmul(Wt_Dinv, W).contiguous()
-        K.view(-1, m * m)[:, ::m + 1] += 1  # add identity matrix to K
-        return torch.linalg.cholesky(K)
-
-    def __lowrank_mahalanobis(self, W, d, x, capacitance_tril):
-        '''
-        Computes the squared Mahalanobis distance: x.T @ inv(D + W @ W.T) @ x
-        It uses Woodbury matrix identity: inv(D + W @ W.T) = inv(D) - inv(D) @ W @ inv(R) @ W.T @ inv(D),
-        where R is the capacitance matrix defined by I + W.T @ inv(D) @ W
-        '''
-        Wt_Dinv = W.T / d.unsqueeze(-2)
-        Wt_Dinv_x = Wt_Dinv @ x
-        mahalanobis_term1 = (x.pow(2) / d).sum(-1)
-        L_inv = torch.cholesky_inverse(capacitance_tril)
-        mahalanobis_term2 = (Wt_Dinv_x.unsqueeze(-1) * L_inv).sum(-2).pow(2.0).sum(-1)
-        return mahalanobis_term1 - mahalanobis_term2
-
-    def __lowrank_logdet(self, d, capacitance_tril):
-        '''
-        Computes the log determinant
-        It uses Matrix Determinant Lemma: log|D + W @ W.T| = log|R| + log|D|,
-        where R is the capacitance matrix defined by I + W.T @ inv(D) @ W
-        '''
-        return 2 * capacitance_tril.diagonal(dim1=-2, dim2=-1).log().sum(-1) + d.log().sum(-1)
+    # def __get_B_factor(self, bin_centers1: torch.Tensor, bin_centers2: torch.Tensor):
+    #
+    #     time_mat = bin_centers1 - bin_centers2.transpose(1, 2)
+    #     time_mat = time_mat.squeeze(0)
+    #
+    #     B_sigma = self.__softplus(self.__prior_B_sigma)
+    #     kernel = torch.exp(-0.5 * torch.div(time_mat**2, B_sigma))
+    #
+    #     # Add a constant term to get rid of computational problems
+    #     kernel = kernel + utils.EPS*torch.eye(n=kernel.shape[0], m=kernel.shape[1])
+    #
+    #     # B x B lower triangular matrix
+    #     L = torch.linalg.cholesky(kernel)
+    #
+    #     return L
+    #
+    # def __get_C_factor(self):
+    #
+    #     # K x N matrix
+    #     # return torch.eye(self.__prior_C_Q.shape[0], self.__prior_C_Q.shape[1])
+    #     return torch.softmax(self.__prior_C_Q, dim=0)
+    #
+    # def __get_D_factor(self):
+    #
+    #     # D x D matrix
+    #     return torch.eye(self.get_dim())
 
     # def __neg_log_prior(self, batch_nodes):
     #
@@ -487,72 +459,130 @@ class LearningModel(BaseModel, torch.nn.Module):
     #
     #     return -log_prior_likelihood.squeeze(0)
 
-    def __neg_log_prior(self, batch_nodes):
+    # # Final version
+    # def __neg_log_prior(self, batch_nodes, batch_num=0):
+    #
+    #     # Get the bin bounds
+    #     bounds = self.get_bins_bounds()
+    #
+    #     # Get the middle time points of the bins for TxT covariance matrix
+    #     middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, self._bins_num) / 2.
+    #
+    #     # B x B matrix
+    #     B_factor = self.__get_B_factor(bin_centers1=middle_bounds, bin_centers2=middle_bounds)
+    #     # N x K matrix where K is the community size
+    #     C_factor = self.__get_C_factor().T
+    #     # D x D matrix
+    #     D_factor = self.__get_D_factor()
+    #
+    #     # B(batch_size)D x BKD matrix
+    #     K_factor_batch = torch.kron(
+    #         B_factor.contiguous(),
+    #         torch.kron(torch.index_select(C_factor.contiguous(), dim=0, index=batch_nodes), D_factor).contiguous()
+    #     )
+    #
+    #     # Some common parameters
+    #     pw_sq = torch.as_tensor(self.__pw) ** 2
+    #     sigma_sq = torch.sigmoid(torch.as_tensor(self.__prior_sigma))
+    #     sigma_sq_inv = 1.0 / sigma_sq
+    #     final_dim = self.get_number_of_nodes() * self._bins_num * self._dim
+    #     reduced_dim = self.__K * self._bins_num * self._dim
+    #
+    #     # Compute the capacitance matrix R only if batch_num == 0
+    #     if batch_num == 0:
+    #         K_factor_full = torch.kron(B_factor.contiguous(), torch.kron(C_factor.contiguous(), D_factor).contiguous())
+    #         self.__R = torch.eye(reduced_dim) + sigma_sq_inv * K_factor_full.T @ K_factor_full
+    #         self.__R_factor = torch.linalg.cholesky(self.__R)
+    #         self.__R_factor_inv = torch.inverse(self.__R)
+    #
+    #     # Normalize and vectorize the velocities
+    #     v_batch = mean_normalization(torch.index_select(self._v, dim=1, index=batch_nodes))
+    #     v_vect_batch = utils.vectorize(v_batch).flatten()
+    #
+    #     # Computation of the squared Mahalanobis distance: v.T @ inv(D + W @ W.T) @ v
+    #     # It uses Woodbury matrix identity: inv(D + Kf @ Kf.T) = inv(D) - inv(D) @ Kf @ inv(R) @ Kf.T @ inv(D),
+    #     # where R is the capacitance matrix defined by I + Kf.T @ inv(D) @ Kf
+    #     mahalanobis_term1 = sigma_sq_inv * v_vect_batch.pow(2).sum(-1)
+    #     mahalanobis_term2 = (sigma_sq_inv * v_vect_batch @ K_factor_batch @ self.__R_factor_inv.T).pow(2).sum(-1)
+    #     m = (1.0 / pw_sq) * (mahalanobis_term1 - mahalanobis_term2 )
+    #
+    #     # Computation of the log determinant
+    #     # It uses Matrix Determinant Lemma: log|D + Kf @ Kf.T| = log|R| + log|D|,
+    #     # where R is the capacitance matrix defined by I + Kf.T @ inv(D) @ Kf
+    #     log_det = 2 * self.__R_factor.diagonal(dim1=-2, dim2=-1).log().sum(-1) + final_dim * (pw_sq.log() + sigma_sq.log())
+    #
+    #     # Compute the negative log-likelihood
+    #     log_prior_likelihood = -0.5 * (final_dim * utils.LOG2PI + log_det + m)
+    #
+    #     return -log_prior_likelihood.squeeze(0)
 
-        # Get the number of bin size
-
-        # Get the bin bounds
-        bounds = self.get_bins_bounds()
-
-        # Get the middle time points of the bins for TxT covariance matrix
-        middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, self._bins_num) / 2.
-
-        # B x B matrix
-        B_factor = self.__get_B_factor(bin_centers1=middle_bounds, bin_centers2=middle_bounds).T
-        # K x N matrix where K is the community size
-        C_factor = self.__get_C_factor()
-        # D x D matrix
-        D_factor = self.__get_D_factor()
-
-        # BKD x BND matrix
-        S = torch.kron(B_factor.contiguous(), torch.kron(C_factor.contiguous(), D_factor).contiguous())
-
-        pw = torch.as_tensor(self.__pw) #torch.sigmoid(torch.as_tensor(self.__pw))
-        sigma_sq = torch.sigmoid(torch.as_tensor(self.__prior_sigma))
-        final_dim = self.get_number_of_nodes() * self._bins_num * self._dim
-
-        # Batching
-        B_index = torch.ones(size=(self._bins_num,), dtype=torch.int)
-        C_index = torch.zeros(size=(self.get_number_of_nodes(),), dtype=torch.int)
-        C_index[batch_nodes] = 1
-        D_index = torch.ones(size=(self.get_dim(),), dtype=torch.int)
-        chosen_index_mask = torch.kron(B_index, torch.kron(C_index, D_index))
-        indices = torch.arange(final_dim) * chosen_index_mask
-
-        S_batch = torch.index_select(S, dim=1, index=indices)
-
-        batch_v = torch.index_select(mean_normalization(self._v), dim=1, index=batch_nodes)
-        v_vect = batch_v.flatten()
-
-        # Some common terms
-        d = (pw ** 2) * sigma_sq * torch.diag(torch.eye(final_dim))
-        W = pw * S_batch.T
-        W_size = W.size(-1)
-        Wt_Dinv = W.T / d.unsqueeze(-2)
-        Wt_Dinv_x = Wt_Dinv @ v_vect
-
-        # Computation of Cholesky of R := I + W.T @ inv(D) @ W
-        R = torch.matmul(Wt_Dinv, W).contiguous()
-        R.view(-1, W_size * W_size)[:, ::W_size + 1] += 1  # add identity matrix to K
-
-        R_factor_tril = torch.linalg.cholesky(R)
-
-        # Computation of the squared Mahalanobis distance: x.T @ inv(D + W @ W.T) @ x
-        # It uses Woodbury matrix identity: inv(D + W @ W.T) = inv(D) - inv(D) @ W @ inv(R) @ W.T @ inv(D),
-        # where R is the capacitance matrix defined by I + W.T @ inv(D) @ W
-        mahalanobis_term1 = (v_vect.pow(2) / d).sum(-1)
-        mahalanobis_term2 = (Wt_Dinv_x.unsqueeze(-1) * torch.inverse(R_factor_tril).T ).sum(-2).pow(2.0).sum(-1)
-        M = mahalanobis_term1 - mahalanobis_term2
-
-        # Computation of the log determinant
-        # It uses Matrix Determinant Lemma: log|D + W @ W.T| = log|R| + log|D|,
-        # where R is the capacitance matrix defined by I + W.T @ inv(D) @ W
-        log_det = 2 * R_factor_tril.diagonal(dim1=-2, dim2=-1).log().sum(-1) + d.log().sum(-1)
-
-        # Compute the negative log-likelihood
-        log_prior_likelihood = -0.5 * (final_dim * utils.LOG2PI + log_det + M)
-
-        return -log_prior_likelihood.squeeze(0)
+    # # Working without batching
+    # def __neg_log_prior(self, batch_nodes):
+    #
+    #     # Get the number of bin size
+    #
+    #     # Get the bin bounds
+    #     bounds = self.get_bins_bounds()
+    #
+    #     # Get the middle time points of the bins for TxT covariance matrix
+    #     middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, self._bins_num) / 2.
+    #
+    #     # B x B matrix
+    #     B_factor = self.__get_B_factor(bin_centers1=middle_bounds, bin_centers2=middle_bounds).T
+    #     # K x N matrix where K is the community size
+    #     C_factor = self.__get_C_factor()
+    #     # D x D matrix
+    #     D_factor = self.__get_D_factor()
+    #
+    #     # BKD x BND matrix
+    #     S = torch.kron(B_factor.contiguous(), torch.kron(C_factor.contiguous(), D_factor).contiguous())
+    #
+    #     pw = torch.as_tensor(self.__pw) #torch.sigmoid(torch.as_tensor(self.__pw))
+    #     sigma_sq = torch.sigmoid(torch.as_tensor(self.__prior_sigma))
+    #     final_dim = self.get_number_of_nodes() * self._bins_num * self._dim
+    #
+    #     # Batching
+    #     B_index = torch.ones(size=(self._bins_num,), dtype=torch.int)
+    #     C_index = torch.zeros(size=(self.get_number_of_nodes(),), dtype=torch.int)
+    #     C_index[batch_nodes] = 1
+    #     D_index = torch.ones(size=(self.get_dim(),), dtype=torch.int)
+    #     chosen_index_mask = torch.kron(B_index, torch.kron(C_index, D_index))
+    #     indices = torch.arange(final_dim) * chosen_index_mask
+    #
+    #     S_batch = torch.index_select(S, dim=1, index=indices)
+    #
+    #     batch_v = torch.index_select(mean_normalization(self._v), dim=1, index=batch_nodes)
+    #     v_vect = batch_v.flatten()
+    #
+    #     # Some common terms
+    #     d = (pw ** 2) * sigma_sq * torch.diag(torch.eye(final_dim))
+    #     W = pw * S_batch.T
+    #     W_size = W.size(-1)
+    #     Wt_Dinv = W.T / d.unsqueeze(-2)
+    #     Wt_Dinv_x = Wt_Dinv @ v_vect
+    #
+    #     # Computation of Cholesky of R := I + W.T @ inv(D) @ W
+    #     R = torch.matmul(Wt_Dinv, W).contiguous()
+    #     R.view(-1, W_size * W_size)[:, ::W_size + 1] += 1  # add identity matrix to K
+    #
+    #     R_factor_tril = torch.linalg.cholesky(R)
+    #
+    #     # Computation of the squared Mahalanobis distance: x.T @ inv(D + W @ W.T) @ x
+    #     # It uses Woodbury matrix identity: inv(D + W @ W.T) = inv(D) - inv(D) @ W @ inv(R) @ W.T @ inv(D),
+    #     # where R is the capacitance matrix defined by I + W.T @ inv(D) @ W
+    #     mahalanobis_term1 = (v_vect.pow(2) / d).sum(-1)
+    #     mahalanobis_term2 = (Wt_Dinv_x.unsqueeze(-1) * torch.inverse(R_factor_tril).T ).sum(-2).pow(2.0).sum(-1)
+    #     M = mahalanobis_term1 - mahalanobis_term2
+    #
+    #     # Computation of the log determinant
+    #     # It uses Matrix Determinant Lemma: log|D + W @ W.T| = log|R| + log|D|,
+    #     # where R is the capacitance matrix defined by I + W.T @ inv(D) @ W
+    #     log_det = 2 * R_factor_tril.diagonal(dim1=-2, dim2=-1).log().sum(-1) + d.log().sum(-1)
+    #
+    #     # Compute the negative log-likelihood
+    #     log_prior_likelihood = -0.5 * (final_dim * utils.LOG2PI + log_det + M)
+    #
+    #     return -log_prior_likelihood.squeeze(0)
 
     # def __neg_log_prior(self, batch_nodes):
     #

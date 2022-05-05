@@ -1,27 +1,18 @@
 import random
 import numpy as np
 import torch
-import utils
-from utils import mean_normalization
-from torch.nn.functional import pdist
-import time
+from utils import *
 
 
 class BaseModel(torch.nn.Module):
     '''
     Description
     '''
-    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, last_time: float,
-                 bins_num: int = None, node_pairs_mask: torch.Tensor = None, device: torch.device = "cpu",
+    def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, bins_num: int = 10,
+                 last_time: float = 1.0, prior_lambda: float = 1e5, prior_sigma: torch.Tensor = None,
+                 prior_B_sigma: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
+                 node_pairs_mask: torch.Tensor = None, device: torch.device = "cpu",
                  verbose: bool = False, seed: int = 0):
-        '''
-
-        :param x0: initial position tensor of size N x D
-        :param v: velocity tensor of size I x N X D where I is the number of intervals/bins
-        :param beta: bias terms for the nodes, a tensor of size N
-        :param bins_num: # Number of bins
-        :param seed: seed value
-        '''
 
         super(BaseModel, self).__init__()
 
@@ -39,6 +30,16 @@ class BaseModel(torch.nn.Module):
         # Extract the number of nodes and the dimension size
         self._nodes_num = self._x0.shape[0]
         self._dim = self._x0.shape[1]
+
+        # Initialize the parameters of prior function
+        # scaling factor of covariance matrix
+        self._prior_lambda = torch.as_tensor(prior_lambda, dtype=torch.float, device=self._device)
+        # noise deviation
+        self._prior_sigma = torch.as_tensor(prior_sigma, dtype=torch.float, device=self._device)
+        # length-scale parameter of RBF kernel used in the construction of B
+        self._prior_B_sigma = torch.as_tensor(prior_B_sigma, dtype=torch.float, device=self._device)
+        self._prior_C_Q = prior_C_Q  # the parameter required for the construction of the matrix C
+        self.__R, self.__R_factor, self.__R_factor_inv = None, None, None  # Capacitance matrix
 
         # Check if the given parameters have correct shapes
         self._check_input_params()
@@ -106,21 +107,6 @@ class BaseModel(torch.nn.Module):
         )
 
         return xt
-
-    # def get_norm_sum(self, alpha, xt_bins, time_indices, bin_bounds,
-    #                  times_list: torch.Tensor, distance: str = "squared_euc") -> torch.Tensor:
-    #
-    #     if distance != "squared_euc":
-    #         raise NotImplementedError("Not implemented for other than squared euclidean.")
-    #
-    #     p = torch.sigmoid(alpha).view(-1, 1).expand(self.get_num_of_bins(), self._dim)
-    #     bin_counts = torch.bincount(time_indices, minlength=self.get_num_of_bins()).type(torch.float)
-    #     # print(":> ", xt_bins.shape, p.shape, )
-    #     squared_norm = torch.norm(
-    #         (1 - p) * xt_bins[:-1, :] + p * xt_bins[1:, :], dim=1, keepdim=False
-    #     ) ** 2
-    #     # print(":>", self.get_num_of_bins(), bin_counts.shape, squared_norm.shape)
-    #     return torch.dot(bin_counts, squared_norm)
 
     def get_pairwise_distances(self, times_list: torch.Tensor, node_pairs: torch.Tensor = None,
                                distance: str = "squared_euc"):
@@ -228,38 +214,6 @@ class BaseModel(torch.nn.Module):
         # From bins_counts x len(node_pairs) matrix to a vector
         return (term0 * term1 * (term2_u - term2_l)).sum(dim=0)
 
-        # # Common variables
-        # delta_x0 = torch.index_select(x0, dim=0, index=unique_node_pairs[0]) - \
-        #            torch.index_select(x0, dim=0, index=unique_node_pairs[1])
-        # delta_v = torch.index_select(v, dim=1, index=unique_node_pairs[0]) - \
-        #           torch.index_select(v, dim=1, index=unique_node_pairs[1])
-        # beta_ij = (beta * 2).expand(unique_node_pairs.shape[1])  # beta[node_pairs[0]] + beta[node_pairs[1]]
-        #
-        # # if len(node_pairs.shape) == 1:
-        # #     delta_x0 = delta_x0.view(1, self._dim)
-        # #     delta_v = delta_v.view(self.get_num_of_bins(), 1, self._dim)
-        #
-        # if distance != "squared_euc":
-        #     raise ValueError("Invalid distance metric!")
-
-        # delta_xt = self.get_xt(events_times_list=bin_bounds[:-1], x0=delta_x0, v=delta_v)
-        #
-        # norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
-        # # norm_v: a matrix of bins_counts x len(node_pairs)
-        # norm_delta_v = torch.norm(delta_v, p=2, dim=2, keepdim=False)
-        # inv_norm_delta_v = 1.0 / (norm_delta_v + const.eps)
-        # delta_xt_v = (delta_xt * delta_v).sum(dim=2, keepdim=False)
-        # r = delta_xt_v * inv_norm_delta_v
-        #
-        # term0 = 0.5 * torch.sqrt(const.pi).to(self._device) * inv_norm_delta_v
-        # # term1 = torch.exp( beta_ij.unsqueeze(0) + r**2 - norm_delta_xt**2 )
-        # term1 = torch.exp(beta_ij.unsqueeze(0) + r ** 2 - norm_delta_xt ** 2)
-        # term2_u = torch.erf(bin_bounds[1:].expand(norm_delta_v.shape[1], len(bin_bounds)-1).t()*norm_delta_v + r)
-        # term2_l = torch.erf(bin_bounds[:-1].expand(norm_delta_v.shape[1], len(bin_bounds)-1).t()*norm_delta_v + r)
-        #
-        # # From bins_counts x len(node_pairs) matrix to a vector
-        # return (term0 * term1 * (term2_u - term2_l)).sum(dim=0)
-
     def get_survival_function(self, times_list: torch.Tensor, x0: torch.Tensor = None, v: torch.Tensor = None,
                               beta: torch.Tensor = None, bin_bounds: torch.Tensor = None,
                               node_pairs: torch.tensor = None, distance: str = "squared_euc"):
@@ -365,5 +319,84 @@ class BaseModel(torch.nn.Module):
     def get_number_of_nodes(self):
 
         return self._nodes_num
+
+    def get_neg_log_prior(self, batch_nodes, batch_num=0):
+
+        def _get_B_factor(bin_centers1: torch.Tensor, bin_centers2: torch.Tensor):
+            time_mat = bin_centers1 - bin_centers2.transpose(1, 2)
+            time_mat = time_mat.squeeze(0)
+
+            B_sigma = utils.softplus(self._prior_B_sigma)
+            kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma))
+
+            # Add a constant term to get rid of computational problems
+            kernel = kernel + utils.EPS * torch.eye(n=kernel.shape[0], m=kernel.shape[1])
+
+            # B x B lower triangular matrix
+            L = torch.linalg.cholesky(kernel)
+
+            return L
+
+        def _get_C_factor():
+            # K x N matrix
+            return torch.softmax(self._prior_C_Q, dim=0)
+
+        def _get_D_factor():
+            # D x D matrix
+            return torch.eye(self.get_dim())
+
+        # Get the bin bounds
+        bounds = self.get_bins_bounds()
+
+        # Get the middle time points of the bins for TxT covariance matrix
+        middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, self._bins_num) / 2.
+
+        # B x B matrix
+        B_factor = _get_B_factor(bin_centers1=middle_bounds, bin_centers2=middle_bounds)
+        # N x K matrix where K is the community size
+        C_factor = _get_C_factor().T
+        # D x D matrix
+        D_factor = _get_D_factor()
+
+        # B(batch_size)D x BKD matrix
+        K_factor_batch = torch.kron(
+            B_factor.contiguous(),
+            torch.kron(torch.index_select(C_factor.contiguous(), dim=0, index=batch_nodes), D_factor).contiguous()
+        )
+
+        # Some common parameters
+        lambda_sq = self._prior_lambda ** 2
+        sigma_sq = torch.sigmoid(self._prior_sigma)
+        sigma_sq_inv = 1.0 / sigma_sq
+        final_dim = self.get_number_of_nodes() * self._bins_num * self._dim
+        reduced_dim = self._prior_C_Q.shape[0] * self._bins_num * self._dim
+
+        # Compute the capacitance matrix R only if batch_num == 0
+        if batch_num == 0:
+            K_factor_full = torch.kron(B_factor.contiguous(), torch.kron(C_factor.contiguous(), D_factor).contiguous())
+            self.__R = torch.eye(reduced_dim) + sigma_sq_inv * K_factor_full.T @ K_factor_full
+            self.__R_factor = torch.linalg.cholesky(self.__R)
+            self.__R_factor_inv = torch.inverse(self.__R)
+
+        # Normalize and vectorize the velocities
+        v_batch = mean_normalization(torch.index_select(self._v, dim=1, index=batch_nodes))
+        v_vect_batch = utils.vectorize(v_batch).flatten()
+
+        # Computation of the squared Mahalanobis distance: v.T @ inv(D + W @ W.T) @ v
+        # It uses Woodbury matrix identity: inv(D + Kf @ Kf.T) = inv(D) - inv(D) @ Kf @ inv(R) @ Kf.T @ inv(D),
+        # where R is the capacitance matrix defined by I + Kf.T @ inv(D) @ Kf
+        mahalanobis_term1 = sigma_sq_inv * v_vect_batch.pow(2).sum(-1)
+        mahalanobis_term2 = (sigma_sq_inv * v_vect_batch @ K_factor_batch @ self.__R_factor_inv.T).pow(2).sum(-1)
+        m = (1.0 / lambda_sq) * (mahalanobis_term1 - mahalanobis_term2 )
+
+        # Computation of the log determinant
+        # It uses Matrix Determinant Lemma: log|D + Kf @ Kf.T| = log|R| + log|D|,
+        # where R is the capacitance matrix defined by I + Kf.T @ inv(D) @ Kf
+        log_det = 2 * self.__R_factor.diagonal(dim1=-2, dim2=-1).log().sum(-1) + final_dim * (lambda_sq.log() + sigma_sq.log())
+
+        # Compute the negative log-likelihood
+        log_prior_likelihood = -0.5 * (final_dim * utils.LOG2PI + log_det + m)
+
+        return -log_prior_likelihood.squeeze(0)
 
 
