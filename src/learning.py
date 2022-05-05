@@ -2,11 +2,8 @@ import sys
 import math
 import torch
 from src.base import BaseModel
-from functools import partial
 from torch.utils.tensorboard import SummaryWriter
 from torch_sparse import spspmm
-from utils import mean_normalization
-import utils
 import time
 
 
@@ -71,7 +68,6 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__all_pairs = torch.repeat_interleave(self.__events_pairs, self.__all_lengths, dim=0)
         self.__sampling_weights = torch.ones(self.get_number_of_nodes())
         self.__sparse_row = (self.__all_pairs[:, 0] * self.get_number_of_nodes())+ self.__all_pairs[:, 1]
-
 
     def learn(self, learning_type=None):
 
@@ -823,16 +819,15 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         params = dict()
 
-        params['_init_time'] = self._init_time
-        params['_last_time'] = self._last_time
-
-        # The prior function parameters
-        for name, param in self.named_parameters():
-            # if param.requires_grad:
-            params[name.replace(self.__class__.__name__+'__', '')] = param
-
         params['_nodes_num'] = self._nodes_num
         params['_dim'] = self._dim
         params['_seed'] = self._seed
+
+        for name, param in self.named_parameters():
+            # if param.requires_grad:
+            params[name.replace(self.__class__.__name__+'_', '')] = param
+
+        params['_prior_lambda'] = self._prior_lambda
+        params['_prior_sigma'] = self._prior_sigma
 
         return params

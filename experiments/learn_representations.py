@@ -8,10 +8,10 @@ from src.events import Events
 
 # Set some paremeters
 dim = 2
-K = 4
-bins_num = 3
+K = 10
+bins_num = 100
 prior_lambda = 1e5
-batch_size = 30  #1
+batch_size = 100  #1
 learning_rate = 0.01
 epochs_num = 800  # 500
 steps_per_epoch = 3
@@ -20,12 +20,12 @@ verbose = True
 shuffle = True
 
 ###
-dataset_name = f"three_clusters_fp_sizes=15_20_10"
+dataset_name = f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
 
 # Define dataset and model path
 dataset_path = os.path.join(
-    utils.BASE_FOLDER, "datasets", "synthetic", dataset_name, f"{dataset_name}_events.pkl"
+    utils.BASE_FOLDER, "datasets", "real", dataset_name, f"{dataset_name}_events.pkl"
 )
 model_folder = os.path.join(
     utils.BASE_FOLDER, "experiments", "models", model_name

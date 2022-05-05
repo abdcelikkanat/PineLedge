@@ -97,8 +97,7 @@ if visualization:
         x0=torch.repeat_interleave(lm.get_x0(), repeats=len(frame_times), dim=0),
         v=torch.repeat_interleave(lm.get_v(), repeats=len(frame_times), dim=1)
     ).reshape((lm.get_number_of_nodes(), len(frame_times),  lm.get_dim())).transpose(0, 1).detach().numpy()
-    # embs_pred = embs_pred.
-    print(embs_pred.shape)
+
     node2color = [node2group[idx] for idx in range(nodes_num)]
     anim = Animation(embs_pred, fps=12, node2color=node2color,
                      data=data, frame_times=frame_times.numpy())

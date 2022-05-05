@@ -101,7 +101,7 @@ class BaseModel(torch.nn.Module):
 
         xt = x0 + torch.index_select(cum_displacement, dim=0, index=events_bin_indices * v.shape[1] + torch.arange(len(events_bin_indices)))
         # Finally, add the the displacement on the interval that nodes lay on
-        xt += torch.mul(
+        xt = xt + torch.mul(
             residual_time.unsqueeze(1),
             torch.index_select(v.view(-1, self._dim), dim=0, index=events_bin_indices * v.shape[1] + torch.arange(len(events_bin_indices)))
         )
@@ -194,9 +194,9 @@ class BaseModel(torch.nn.Module):
 
         delta_xt = self.get_xt(
             events_times_list=torch.cat([bin_bounds[:-1]] * delta_x0.shape[0]),
-            x0=torch.repeat_interleave(delta_x0, repeats=self._bins_num, dim=0),
-            v=torch.repeat_interleave(delta_v, repeats=self._bins_num, dim=1),
-        ).reshape((delta_x0.shape[0], self._bins_num,  self._dim)).transpose(0, 1)
+            x0=torch.repeat_interleave(delta_x0, repeats=len(bin_bounds)-1, dim=0),
+            v=torch.repeat_interleave(delta_v, repeats=len(bin_bounds)-1, dim=1),
+        ).reshape((delta_x0.shape[0], len(bin_bounds)-1,  self._dim)).transpose(0, 1)
 
         norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
         # norm_v: a matrix of bins_counts x len(node_pairs)
@@ -320,30 +320,33 @@ class BaseModel(torch.nn.Module):
 
         return self._nodes_num
 
+    def _get_B_factor(self, bin_centers1: torch.Tensor, bin_centers2: torch.Tensor, only_kernel=False):
+        time_mat = bin_centers1 - bin_centers2.transpose(1, 2)
+        time_mat = time_mat.squeeze(0)
+
+        B_sigma = utils.softplus(self._prior_B_sigma)
+        kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma))
+
+        # Add a constant term to get rid of computational problems
+        kernel = kernel + utils.EPS * torch.eye(n=kernel.shape[0], m=kernel.shape[1])
+
+        if only_kernel:
+            return kernel
+
+        # B x B lower triangular matrix
+        L = torch.linalg.cholesky(kernel)
+
+        return L
+
+    def _get_C_factor(self):
+        # K x N matrix
+        return torch.softmax(self._prior_C_Q, dim=0)
+
+    def _get_D_factor(self):
+        # D x D matrix
+        return torch.eye(self.get_dim())
+
     def get_neg_log_prior(self, batch_nodes, batch_num=0):
-
-        def _get_B_factor(bin_centers1: torch.Tensor, bin_centers2: torch.Tensor):
-            time_mat = bin_centers1 - bin_centers2.transpose(1, 2)
-            time_mat = time_mat.squeeze(0)
-
-            B_sigma = utils.softplus(self._prior_B_sigma)
-            kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma))
-
-            # Add a constant term to get rid of computational problems
-            kernel = kernel + utils.EPS * torch.eye(n=kernel.shape[0], m=kernel.shape[1])
-
-            # B x B lower triangular matrix
-            L = torch.linalg.cholesky(kernel)
-
-            return L
-
-        def _get_C_factor():
-            # K x N matrix
-            return torch.softmax(self._prior_C_Q, dim=0)
-
-        def _get_D_factor():
-            # D x D matrix
-            return torch.eye(self.get_dim())
 
         # Get the bin bounds
         bounds = self.get_bins_bounds()
@@ -352,11 +355,11 @@ class BaseModel(torch.nn.Module):
         middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, self._bins_num) / 2.
 
         # B x B matrix
-        B_factor = _get_B_factor(bin_centers1=middle_bounds, bin_centers2=middle_bounds)
+        B_factor = self._get_B_factor(bin_centers1=middle_bounds, bin_centers2=middle_bounds)
         # N x K matrix where K is the community size
-        C_factor = _get_C_factor().T
+        C_factor = self._get_C_factor().T
         # D x D matrix
-        D_factor = _get_D_factor()
+        D_factor = self._get_D_factor()
 
         # B(batch_size)D x BKD matrix
         K_factor_batch = torch.kron(

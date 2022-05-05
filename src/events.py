@@ -65,12 +65,6 @@ class Events(Dataset):
         with open(file_path, 'wb') as f:
             pkl.dump(data, f)
 
-    # def pairs(self):
-    #
-    #     for i in range(self.__nodes_num):
-    #         for j in range(i+1, self.__nodes_num):
-    #             yield i, j
-
     def number_of_nodes(self):
 
         return self.__nodes_num
@@ -145,7 +139,8 @@ class Events(Dataset):
                 residual_events.append(self.__events[idx])
                 residual_pairs.append(self.__pairs[idx])
 
-        return Events(data=(residual_events, residual_pairs)), Events(data=(removed_events, removed_pairs))
+        return Events(data=(residual_events, residual_pairs), nodes_num=self.__nodes_num), \
+               Events(data=(removed_events, removed_pairs), nodes_num=self.__nodes_num)
 
     # def get_first_event_time(self):
     #
@@ -171,27 +166,43 @@ class Events(Dataset):
     #
     #     return max_value
 
-    # def get_train_events(self, last_time, batch_size=None):
-    #
-    #     if batch_size is None:
-    #         batch_size = self.__batch_size
-    #
-    #     train_events = copy.deepcopy(self.__events)
-    #     for i, j in self.pairs():
-    #         train_events[i][j] = [t for t in self.__events[i][j] if t <= last_time]
-    #
-    #     return Events(train_events, batch_size=batch_size)
-    #
-    # def get_test_events(self, init_time, batch_size=None):
-    #
-    #     if batch_size is None:
-    #         batch_size = self.__batch_size
-    #
-    #     test_events = copy.deepcopy(self.__events)
-    #     for i, j in self.pairs():
-    #         test_events[i][j] = [t for t in self.__events[i][j] if t > init_time]
-    #
-    #     return Events(test_events, batch_size=batch_size)
+    def split_events_in_time(self, split_time):
+
+        train_events = []
+        train_pairs = []
+        test_events = []
+        test_pairs = []
+
+        for idx, events in enumerate(self.__events):
+
+            l_list, u_list = [], []
+            for e in events:
+                if e < split_time:
+                    l_list.append(e)
+                else:
+                    u_list.append(e)
+
+            if len(l_list):
+                train_events.append(l_list)
+                train_pairs.append(self.__pairs[idx])
+
+            if len(u_list):
+                test_events.append(u_list)
+                test_pairs.append(self.__pairs[idx])
+
+        return Events(data=(train_events, train_pairs), nodes_num=self.__nodes_num), \
+               Events(data=(test_events, test_pairs), nodes_num=self.__nodes_num)
+
+    def get_test_events(self, init_time, batch_size=None):
+
+        if batch_size is None:
+            batch_size = self.__batch_size
+
+        test_events = copy.deepcopy(self.__events)
+        for i, j in self.pairs():
+            test_events[i][j] = [t for t in self.__events[i][j] if t > init_time]
+
+        return Events(test_events, batch_size=batch_size)
     #
     # def get_subevents(self, init_time, last_time):
     #
