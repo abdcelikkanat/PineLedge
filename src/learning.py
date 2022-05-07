@@ -13,7 +13,7 @@ class LearningModel(BaseModel, torch.nn.Module):
                  prior_k: int = 4, prior_lambda: float = 1.0,
                  node_pairs_mask: torch.Tensor = None,
                  learning_rate: float = 0.1, batch_size: int = None, epochs_num: int = 100,
-                 steps_per_epoch=10, device: torch.device = "cpu", verbose: bool = False, seed: int = 0,
+                 steps_per_epoch=10, device: torch.device = None, verbose: bool = False, seed: int = 0,
                  approach: str = "nhpp"):
 
         super(LearningModel, self).__init__(

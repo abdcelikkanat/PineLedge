@@ -45,10 +45,10 @@ residual, removed = all_events.remove_events(num=num)
 removed_pairs = removed.get_pairs()
 removed_events = removed.get_events()
 
-for pwIdx, pw in enumerate(prior_weight_list):
+for pwIdx, prior_lambda in enumerate(prior_weight_list):
 
     ###
-    model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pw={pw}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}_percent={percent}"
+    model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}_percent={percent}"
 
     model_folder = os.path.join(
         utils.BASE_FOLDER, "experiments", "models", model_name
@@ -60,10 +60,11 @@ for pwIdx, pw in enumerate(prior_weight_list):
     # Construct data
     data = all_events.get_pairs(), all_events.get_events()
     # Run the model
-    lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, k=K,
+    lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,
+                       prior_k=K, prior_lambda=prior_lambda,
                        node_pairs_mask=torch.as_tensor(removed_pairs).T, last_time=1.,
                        learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
-                       verbose=verbose, seed=seed, pw=pw)
+                       verbose=verbose, seed=seed)
 
     if learn:
         # Save the model
@@ -89,7 +90,7 @@ for pwIdx, pw in enumerate(prior_weight_list):
             event_times=torch.as_tensor(pair_events),
             event_node_pairs=torch.repeat_interleave(torch.as_tensor(node_pair).unsqueeze(1), len(pair_events), 1)
         )
-    print(f"Loss of masked pairs: {nll} - pw: {pw}")
+    print(f"Loss of masked pairs: {nll} - pw: {prior_lambda}")
 
     nll = 0
     for node_pair, pair_events in zip(residual.get_pairs(), residual.get_events()):
@@ -100,4 +101,4 @@ for pwIdx, pw in enumerate(prior_weight_list):
 
         )
 
-    print("Residual loss: ", pw, nll)
+    print("Residual loss: ", prior_lambda, nll)

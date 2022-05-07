@@ -4,26 +4,32 @@ import random
 import torch
 import numpy as np
 import pickle as pkl
-import matplotlib.pyplot as plt
-from torch.utils.data.dataset import Dataset
-from math import factorial as fac
-from utils.utils import linearIdx2matIdx
 import copy
+import matplotlib.pyplot as plt
+from utils import *
 
 
-class Events(Dataset):
+class Events:
 
-    def __init__(self, data=(None, None), nodes_num=None, seed=0):
+    def __init__(self, path: str = None, data: tuple = None, seed=0):
 
-        super().__init__()
-
-        self.__nodes_num = nodes_num
-        self.__events_dict = None
-
-        self.__events = data[0]
-        self.__pairs = data[1]
-
+        self.__events = None
+        self.__pairs = None
+        self.__nodes_num = None
         self.__nodes = None
+
+        assert path is None or data is None, "Path and data parameter cannot be set at the same time!"
+
+        if path is not None:
+            self.read(path)
+
+        if data is not None:
+            self.__events = data[0]
+            self.__pairs = data[1]
+
+        self.__initialize()
+
+
         # Set the seed value
         self.__set_seed(seed=seed)
 
@@ -33,37 +39,54 @@ class Events(Dataset):
         np.random.seed(seed)
         torch.manual_seed(seed)
 
-    def read(self, file_path):
+    def read(self, path):
 
-        with open(file_path, 'rb') as f:
-            data = pkl.load(f)
+        with open(os.path.join(path, 'events.pkl'), 'rb') as f:
+            self.__events = list(pkl.load(f))
 
-        self.__initialize(
-            events_dict=data["events"], nodes_num=data.get("n", len(data["events"][0].keys()) + 1)
-        )
+        with open(os.path.join(path, 'pairs.pkl'), 'rb') as f:
+            self.__pairs = list(pkl.load(f))
 
-        self.__events, self.__pairs = [], []
-        for i in range(self.__nodes_num):
-            for j in range(i+1, self.__nodes_num):
+        # Make sure that list elements are int
+        self.__pairs = np.asarray(self.__pairs, dtype=np.int).tolist()
 
-                if len(self.__events_dict[i][j]):
-                    self.__pairs.append([i, j])
-                    self.__events.append(self.__events_dict[i][j])
+    def __initialize(self):
 
-    def __initialize(self, events_dict, nodes_num):
-        # Events are a dictionary of a dictionary storing a list of events
-        self.__events_dict = events_dict
-        # Get the number of nodes
-        self.__nodes_num = nodes_num
-        # The nodes are integer values
+        # Set the number of nodes
+        self.__nodes_num = len(np.unique(self.__pairs))
+
+        # Set the nodes
         self.__nodes = [node for node in range(self.__nodes_num)]
 
-    def write(self, file_path):
+    def write(self, folder_path):
 
-        data = {'events': self.__events, 'n': self.__nodes_num}
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
 
-        with open(file_path, 'wb') as f:
-            pkl.dump(data, f)
+        with open(os.path.join(folder_path, 'events.pkl'), 'wb') as f:
+            pkl.dump(self.__events, f)
+
+        with open(os.path.join(folder_path, 'pairs.pkl'), 'wb') as f:
+            pkl.dump(self.__pairs, f)
+
+    def __getitem__(self, item):
+
+        if type(item) is int:
+
+            return self.__pairs[item], self.__events[item]
+
+        elif type(item) is tuple or type(item) is list:
+
+            try:
+                idx = self.__pairs.index(list(item))
+                return self.__pairs[idx], self.__events[idx]
+
+            except ValueError:
+                return item, []
+
+        else:
+
+            raise ValueError("Invalid input type!")
 
     def number_of_nodes(self):
 
@@ -77,13 +100,17 @@ class Events(Dataset):
 
         return sum(len(events) for events in self.__events)
 
-    def nodes(self):
+    def get_min_event_time(self):
+
+        return min([min(pair_events) for pair_events in self.__events])
+
+    def get_max_event_time(self):
+
+        return max([max(pair_events) for pair_events in self.__events])
+
+    def get_nodes(self):
 
         return self.__nodes
-
-    def get_data_dict(self):
-
-        return self.__events_dict
 
     def get_events(self):
 
@@ -93,78 +120,17 @@ class Events(Dataset):
 
         return self.__pairs
 
-    def normalize(self, init_time=0, last_time=None):
+    def normalize(self, init_time=0.0, last_time=1.0):
 
-        min_event_time = min([min(pair_events) for pair_events in self.__events])
-        max_event_time = max([max(pair_events) for pair_events in self.__events])
-
-        # for i, j in self.pairs():
-        #
-        #     events = self.__events[i][j]
-        #     if len(events) > 0:
-        #         min_value, max_value = min(events), max(events)
-        #
-        #         if max_value > last_event_time:
-        #             last_event_time = max_value
-        #         if min_value < first_event_time:
-        #             first_event_time = min_value
-        #
-        # # Set the last time if not set
-        # last_time = 1.0 if last_time is None else last_time
-        #
-        # a = (last_time - init_time) / (last_event_time - first_event_time)
-        # b = init_time - a * first_event_time
-        # for i, j in self.pairs():
-        #     for idx in range(len(self.__events[i][j])):
-        #         self.__events[i][j][idx] = a * self.__events[i][j][idx] + b
+        min_event_time = self.get_min_event_time()
+        max_event_time = self.get_max_event_time()
 
         for i in range(len(self.__events)):
             for j in range(len(self.__events[i])):
+                # Scale it to between 0 and 1
                 self.__events[i][j] = (self.__events[i][j] - min_event_time) / (max_event_time - min_event_time)
-
-    def remove_events(self, num):
-
-        chosen_indices = np.random.choice(len(self.__events), size=(num,), replace=False)
-
-        residual_events = []
-        residual_pairs = []
-        removed_events = []
-        removed_pairs = []
-
-        for idx in range(len(self.__events)):
-            if idx in chosen_indices:
-                removed_events.append(self.__events[idx])
-                removed_pairs.append(self.__pairs[idx])
-            else:
-                residual_events.append(self.__events[idx])
-                residual_pairs.append(self.__pairs[idx])
-
-        return Events(data=(residual_events, residual_pairs), nodes_num=self.__nodes_num), \
-               Events(data=(removed_events, removed_pairs), nodes_num=self.__nodes_num)
-
-    # def get_first_event_time(self):
-    #
-    #     min_value = +1e6
-    #     for i, j in self.pairs():
-    #         events = self.__events[i][j]
-    #         if len(events) > 0:
-    #             temp = min(events)
-    #             if min_value > temp:
-    #                 min_value = temp
-    #
-    #     return min_value
-    #
-    # def get_last_event_time(self):
-    #
-    #     max_value = -1e6
-    #     for i, j in self.pairs():
-    #         events = self.__events[i][j]
-    #         if len(events) > 0:
-    #             temp = max(events)
-    #             if max_value < temp:
-    #                 max_value = temp
-    #
-    #     return max_value
+                # Scale it to between init_time and last_time
+                self.__events[i][j] = (last_time - init_time) * self.__events[i][j] - init_time
 
     def split_events_in_time(self, split_time):
 
@@ -190,54 +156,147 @@ class Events(Dataset):
                 test_events.append(u_list)
                 test_pairs.append(self.__pairs[idx])
 
-        return Events(data=(train_events, train_pairs), nodes_num=self.__nodes_num), \
-               Events(data=(test_events, test_pairs), nodes_num=self.__nodes_num)
+        return Events(data=(train_events, train_pairs)), Events(data=(test_events, test_pairs))
 
-    def get_test_events(self, init_time, batch_size=None):
+    def get_subevents(self, init_time, last_time):
 
-        if batch_size is None:
-            batch_size = self.__batch_size
+        _, temp_events = self.split_events_in_time(init_time)
+        subevents, _ = temp_events.split_events_in_time(last_time)
 
-        test_events = copy.deepcopy(self.__events)
-        for i, j in self.pairs():
-            test_events[i][j] = [t for t in self.__events[i][j] if t > init_time]
+        return subevents
 
-        return Events(test_events, batch_size=batch_size)
-    #
-    # def get_subevents(self, init_time, last_time):
-    #
-    #     subevents = copy.deepcopy(self.__events)
-    #     for i, j in self.pairs():
-    #         subevents[i][j] = [t for t in self.__events[i][j] if init_time < t <= last_time]
-    #
-    #     return Events(subevents)
-    #
-    # def get_validation_events(self, num):
-    #
-    #     count = 0
-    #     chosen_indices = [[] for _ in range(self.__nodes_num-1)]
-    #     while count < num:
-    #
-    #         node1, node2 = np.random.randint(low=0, high=self.__nodes_num, size=(2, ))
-    #
-    #         if node1 > node2:
-    #             temp = node1
-    #             node1 = node2
-    #             node2 = temp
-    #
-    #         if node1 != node2 and node2 not in chosen_indices[node1]:
-    #             chosen_indices[node1].append(node2)
-    #             count += 1
-    #
-    #     remaining_events = copy.deepcopy(self.__events)
-    #     validation_events = {i: {j: [] for j in range(i+1, self.__nodes_num)} for i in range(self.__nodes_num-1)}
-    #     for node1 in range(self.__nodes_num-1):
-    #         for node2 in chosen_indices[node1]:
-    #             validation_events[node1][node2].extend(remaining_events[node1][node2])
-    #             remaining_events[node1][node2].clear()
-    #
-    #     return Events(remaining_events, batch_size=self.__batch_size), \
-    #            Events(validation_events, batch_size=self.__batch_size)
+    def remove_events(self, num):
+
+        chosen_indices = np.random.choice(len(self.__events), size=(num,), replace=False)
+
+        residual_events = []
+        residual_pairs = []
+        removed_events = []
+        removed_pairs = []
+
+        for idx in range(len(self.__events)):
+            if idx in chosen_indices:
+                removed_events.append(self.__events[idx])
+                removed_pairs.append(self.__pairs[idx])
+            else:
+                residual_events.append(self.__events[idx])
+                residual_pairs.append(self.__pairs[idx])
+
+        return Events(data=(residual_events, residual_pairs)), Events(data=(removed_events, removed_pairs))
+
+    def construct_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False):
+
+        pos_samples, possible_neg_samples = self.__pos_and_pos_neg_samples(
+            bins_num=bins_num, subsampling=subsampling, init_time=init_time, last_time=last_time, with_time=with_time
+        )
+
+        if with_time:
+
+            time_gen = np.random.default_rng()
+            chosen_idx = np.random.choice(len(possible_neg_samples), size=len(pos_samples), replace=True)
+            neg_samples = list(map(
+                lambda idx: (
+                    possible_neg_samples[idx][0],
+                    possible_neg_samples[idx][1],
+                    (possible_neg_samples[idx][3] - possible_neg_samples[idx][2])*time_gen.random()+possible_neg_samples[idx][2]
+                ), chosen_idx
+            ))
+
+        else:
+            assert len(possible_neg_samples) >= len(pos_samples), "We couldn't find enough possible negative samples!"
+
+            chosen_idx = np.random.choice(len(possible_neg_samples), size=len(pos_samples), replace=False)
+            neg_samples = (np.asarray(possible_neg_samples)[chosen_idx]).tolist()
+
+        all_labels = [1] * len(pos_samples) + [0] * len(neg_samples)
+        all_samples = pos_samples + neg_samples
+
+        return all_labels, all_samples
+
+    def __pos_and_pos_neg_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False):
+
+        all_pos_samples, all_possible_neg_samples = [], []
+        if bins_num > 1:
+
+            bounds = np.linspace(init_time, last_time, bins_num + 1)
+            for b in range(bins_num):
+
+                pos_samples, possible_neg_samples = self.__pos_and_pos_neg_samples(
+                    bins_num=1, subsampling=subsampling, with_time=with_time, init_time=bounds[b],
+                    last_time=bounds[b + 1]
+                )
+
+                all_pos_samples += pos_samples
+                all_possible_neg_samples += possible_neg_samples
+
+        else:
+
+            if init_time is None and last_time is None:
+                subevents = self
+            else:
+                subevents = self.get_subevents(init_time=init_time, last_time=last_time)
+
+            # Sample positive instances
+            if with_time:
+                pos_samples = [(pair[0], pair[1], t) for pair, events in zip(subevents.get_pairs(), subevents.get_events()) for t in events]
+            else:
+                pos_samples = [(i, j) for i, j in subevents.get_pairs()]
+
+            if subsampling > 0:
+                chosen_samples_indices = np.random.choice(len(pos_samples), size=subsampling, replace=False)
+                pos_samples = (np.asarray(pos_samples)[chosen_samples_indices]).tolist()
+
+            possible_neg_samples = [(i, j) for i, j in utils.pair_iter(n=self.__nodes_num) if not len(subevents[(i, j)][1])]
+            if with_time:
+                possible_neg_samples = [(sample[0], sample[1], init_time, last_time) for sample in possible_neg_samples]
+
+            all_pos_samples = pos_samples
+            all_possible_neg_samples = possible_neg_samples
+
+        return all_pos_samples, all_possible_neg_samples
+
+    def plot_events(self, nodes: list = None, fig_size: tuple = None, show = True):
+
+        if nodes is None:
+            nodes = [0, 1]
+
+        nodes_num = len(nodes)
+        nodes = sorted(nodes)
+
+        pair_indices = [[i, j] for i in range(nodes_num) for j in range(i + 1, nodes_num)]
+        pairs = [[nodes[i], nodes[j]] for i, j in pair_indices]
+
+        plt.figure(figsize=fig_size if fig_size is not None else (12, 10))
+
+        for pairIdx, pair in enumerate(pairs):
+            _, events = self.__getitem__(pair)
+            y = len(events) * [pairIdx]
+            plt.plot(events, y, 'k.')
+
+        plt.yticks(np.arange(len(pairs)), [f"({pair[0]},{pair[1]})" for pair in pairs])
+
+        plt.xlabel("Timeline")
+        plt.ylabel("Node pairs")
+
+        if show:
+            plt.show()
+
+        return plt
+
+    def plot_samples(self, labels, samples, fig_size: tuple = None):
+
+        # Plot the events
+        plt = self.plot_events(nodes=list(range(self.number_of_nodes())), fig_size= fig_size, show=False)
+
+        # Check if the samples contain event times
+        assert len(samples[0]) == 3, "Samples do not contain event times!"
+
+        c = ['r.', 'b.']
+        for label, sample in zip(labels, samples):
+
+            plt.plot(sample[2], utils.pairIdx2flatIdx(i=sample[0], j=sample[1], n=self.number_of_nodes()), c[label])
+
+        plt.show()
 
     def get_freq(self):
 
@@ -250,7 +309,11 @@ class Events(Dataset):
 
     def info(self):
 
-        print(f"Number of nodes: {self.number_of_nodes()}")
-        print(f"Number of events: {self.number_of_events()}")
-        print(f"The first event time: {self.get_first_event_time()}")
-        print(f"The last event time: {self.get_last_event_time()}")
+        print("- Dataset Information -")
+        print(f"\tNumber of nodes: {self.number_of_nodes()}")
+        print(f"\tNumber of events: {self.number_of_total_events()}")
+        p = round(100 * self.number_of_event_pairs()/(0.5 * self.number_of_nodes() * (self.number_of_nodes() - 1)), 2)
+        print(f"\tNumber of pairs having at least one event: {self.number_of_event_pairs()} ({p}%)")
+        print(f"\tAverage number of events per pair: {self.number_of_total_events() / float(len(self.__pairs))}")
+        print(f"\tMin. time: {self.get_min_event_time()}")
+        print(f"\tMax. time: {self.get_max_event_time()}")
