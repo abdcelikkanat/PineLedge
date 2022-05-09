@@ -145,7 +145,7 @@ learn = True
 residual_data = residual_events.get_pairs(), residual_events.get_events()
 # Initiate the constructor
 lm = LearningModel(
-    data=residual_data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,  last_time=split_time., batch_size=batch_size,
+    data=residual_data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,  last_time=split_time, batch_size=batch_size,
     prior_k=K, prior_lambda=prior_lambda,
     learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
     verbose=verbose, seed=seed
