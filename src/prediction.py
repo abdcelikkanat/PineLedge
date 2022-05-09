@@ -140,6 +140,13 @@ class PredictionModel(torch.nn.Module):
 
         return torch.exp(self.get_log_intensity(times_list=times_list, node_pairs=node_pairs))
 
+    def get_intensity_integral(self, nodes: torch.Tensor):
+
+        return self._lm.get_intensity_integral(
+            nodes=nodes, x0=self._x_init, v=self._time_samples_expected_v[:-1, :, :],
+            beta=self._beta, bin_bounds=self._time_samples
+        )
+
     def get_negative_log_likelihood(self, event_times: torch.Tensor, event_node_pairs: torch.Tensor):
 
         nodes = torch.arange(self._nodes_num)

@@ -2,9 +2,14 @@ import os
 import utils
 import torch
 from src.learning import LearningModel
+from src.prediction import PredictionModel
 from src.events import Events
 import matplotlib.pyplot as plt
 from sklearn import metrics
+import pickle as pkl
+from sklearn.metrics.cluster import normalized_mutual_info_score
+from sklearn.metrics.cluster import adjusted_mutual_info_score
+from sklearn.metrics import roc_auc_score
 
 # global control for device
 CUDA = True
@@ -20,143 +25,157 @@ else:
 # Set some parameters
 seed = utils.str2int("experiment_design_example")
 
+##################################################################################################################
+#  Link reconstruction experiment  #
+##################################################################################################################
 # Dataset name
 dataset_name = f"ia-contacts_hypertext2009"
+# Percentage
+p = 0.1
+
 # Define dataset
-dataset_folder = os.path.join(utils.BASE_FOLDER, "datasets", "real", dataset_name)
+dataset_folder = os.path.join(utils.BASE_FOLDER, "experiments", "samples_reconst", f"{dataset_name}_p={p}_normalized")
 
 # Load the dataset
-all_events = Events(path=dataset_folder, seed=seed)
+residual_events = Events(path=dataset_folder, seed=seed)
 # Print dataset info
-all_events.info()
-# Normalize the events
-all_events.normalize(init_time=0, last_time=1.0)
-# print(all_events[[all_events.number_of_nodes()-2, all_events.number_of_nodes()-1]])
-# for i, j in utils.pair_iter(n=all_events.number_of_nodes()):
-#     print( len(all_events[(i,j)]) )
+residual_events.info()
+# # Normalize the events # We don't need it
+# all_events.normalize(init_time=0, last_time=1.0)
 
-###########################
-# Dyad removal experiment #
-###########################
-#   Let's remove 10% of links at random and predict them
-residual_events, removed_events = all_events.remove_events(num=int(all_events.number_of_event_pairs() * 0.1))
-removed_events.info()
+# Load sample files
+with open(os.path.join(dataset_folder, "samples.pkl"), 'rb') as f:
+    samples_data = pkl.load(f)
+    pos_samples, neg_samples = samples_data["pos"], samples_data["neg"]
 
 # Let's run the model
-nodes_num = all_events.number_of_nodes()
-print(nodes_num)
+nodes_num = residual_events.number_of_nodes()
 # Run the model
 dim = 2
 K = 4
 bins_num = 3
 prior_lambda = 1e5
-batch_size = 100  #1
-learning_rate = 0.001
-epochs_num = 800  # 500
+batch_size = nodes_num  #1
+learning_rate = 0.01
+epochs_num = 240  # 500
 steps_per_epoch = 3
-seed = utils.str2int("testing_prior")
+seed = utils.str2int("testing_reconstruction")
 verbose = True
 shuffle = True
+learn = True
 
-
-data = residual_events.get_pairs(), residual_events.get_events()
+# Construct the data for the learning model
+residual_data = residual_events.get_pairs(), residual_events.get_events()
+# Initiate the constructor
 lm = LearningModel(
-    data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,  last_time=1., batch_size=batch_size,
+    data=residual_data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,  last_time=1., batch_size=batch_size,
     prior_k=K, prior_lambda=prior_lambda,
     learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
     verbose=verbose, seed=seed
 )
-lm.learn()
+# Learn the model
+model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
+model_path = os.path.join(utils.BASE_FOLDER, "experiments", "models", f"{model_name}.model")
+if learn:
+    lm.learn()
+    torch.save(lm.state_dict(), model_path)
+else:
+    lm.load_state_dict(torch.load(model_path))
 
-# Predict the removed pairs
+# Returns a list storing intensity integrals of an upper triangular matrix
+intensity_values = lm.get_intensity_integral(nodes=torch.arange(nodes_num, dtype=torch.int))
 
-# Flatten the test events and pairs
-flat_test_events = torch.as_tensor(
-    [e for pair_events in residual_events.get_events() for e in pair_events], dtype=torch.float
-)
+# Combine the samples
+samples = pos_samples + neg_samples
+# Combine the labels
+true_labels = [1] * len(pos_samples) + [0] * len(neg_samples)
+# Compute the prediction scores
+pred_scores = [intensity_values[utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=nodes_num)] for pair in samples]
 
-flat_test_pairs = torch.repeat_interleave(
-    torch.as_tensor(residual_events.get_pairs()),
-    repeats=torch.as_tensor(list(map(len, residual_events.get_events())), dtype=torch.int),
-    dim=0
-).T
-
-# Compute log-intensities
-intensity_list = lm.get_log_intensity(
-    times_list=flat_test_events,
-    node_pairs=flat_test_pairs
-).detach().numpy()
+# Compute some metrics
+nmis = normalized_mutual_info_score(labels_true=true_labels, labels_pred=pred_scores)
+amis = adjusted_mutual_info_score(labels_true=true_labels, labels_pred=pred_scores)
+auc = roc_auc_score(y_true=true_labels, y_score=pred_scores)
+print(f"Normalized Mutual Info Score: {nmis}")
+print(f"Adjusted Mutual Info Score: {amis}")
+print(f"ROC AUC Score: {auc}")
 
 
-###########################
-# Prediction experiment #
-###########################
-#   Let's remove the last 5% at random and predict them
+
+##################################################################################################################
+#  Future link prediction experiment  #
+##################################################################################################################
+# Dataset name
+dataset_name = f"ia-contacts_hypertext2009"
+# Split time point
 split_time = 0.9
-residual_events, removed_events = all_events.split_events_in_time(split_time=split_time)
-removed_events.info()
 
-# Construct samples
-#   bins_num -> It divides the whole time interval into subintervals to sample events.
-#   subsampling -> Instead of taking the whole event set as positive instances, a subsampling might be applied.
-#                  The number of positive and negative samples are always equal.
-#   with_time -> If it is True, it also samples time points for negative instances
-true_labels, true_samples = removed_events.construct_samples(
-    bins_num=2, subsampling=100, init_time=split_time, last_time=1.0, with_time=True
-)
-# Plot samples
-all_events.plot_samples(labels=true_labels, samples=true_samples)
+# Define dataset
+dataset_folder = os.path.join(utils.BASE_FOLDER, "experiments", "samples_linkpred", f"{dataset_name}_st={split_time}_normalized")
 
+# Load the dataset
+residual_events = Events(path=dataset_folder, seed=seed)
+# Print dataset info
+residual_events.info()
+# # Normalize the events # We don't need it
+# all_events.normalize(init_time=0, last_time=1.0)
+
+# Load sample files
+with open(os.path.join(dataset_folder, "samples.pkl"), 'rb') as f:
+    samples_data = pkl.load(f)
+    pos_samples, neg_samples = samples_data["pos"], samples_data["neg"]
 
 # Let's run the model
-nodes_num = all_events.number_of_nodes()
-print(f"Number of nodes: {nodes_num}")
+nodes_num = residual_events.number_of_nodes()
 # Run the model
 dim = 2
 K = 4
 bins_num = 3
 prior_lambda = 1e5
-batch_size = 100  #1
-learning_rate = 0.001
-epochs_num = 800  # 500
-steps_per_epoch = 3
-seed = utils.str2int("testing_prior")
+batch_size = nodes_num  #1
+learning_rate = 0.01
+epochs_num = 240  # 500
+steps_per_epoch = 1
+seed = utils.str2int("testing_prediction")
 verbose = True
 shuffle = True
+learn = True
 
-
-data = residual_events.get_pairs(), residual_events.get_events()
+# Construct the data for the learning model
+residual_data = residual_events.get_pairs(), residual_events.get_events()
+# Initiate the constructor
 lm = LearningModel(
-    data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,  last_time=1., batch_size=batch_size,
+    data=residual_data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,  last_time=1., batch_size=batch_size,
     prior_k=K, prior_lambda=prior_lambda,
     learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
     verbose=verbose, seed=seed
 )
-lm.learn()
+# Learn the model
+model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
+model_path = os.path.join(utils.BASE_FOLDER, "experiments", "models", f"{model_name}.model")
+if learn:
+    lm.learn()
+    torch.save(lm.state_dict(), model_path)
+else:
+    lm.load_state_dict(torch.load(model_path))
 
-# Predict the removed pairs
+# Define the prediction model
+pm = PredictionModel(lm=lm, pred_init_time=split_time, pred_last_time=1.0)
 
-# Flatten the test events and pairs
-flat_test_events, flat_test_pairs = [], []
-for triplet in true_samples:
-    flat_test_events.append(triplet[2])
-    flat_test_pairs.append([triplet[0], triplet[1]])
+# Returns a list storing intensity integrals of an upper triangular matrix
+intensity_values = pm.get_intensity_integral(nodes=torch.arange(nodes_num, dtype=torch.int))
 
-flat_test_events = torch.as_tensor(flat_test_events, dtype=torch.float)
-flat_test_pairs = torch.as_tensor(flat_test_pairs, dtype=torch.int).T
+# Combine the samples
+samples = pos_samples + neg_samples
+# Combine the labels
+true_labels = [1] * len(pos_samples) + [0] * len(neg_samples)
+# Compute the prediction scores
+pred_scores = [intensity_values[utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=nodes_num)] for pair in samples]
 
-# Compute log-intensities
-intensity_list = lm.get_log_intensity(
-    times_list=flat_test_events,
-    node_pairs=flat_test_pairs
-).detach().numpy()
-
-fpr, tpr, _ = metrics.roc_curve(true_labels, intensity_list)
-auc = metrics.roc_auc_score(true_labels, intensity_list)
-
-# Plot ROC curve
-plt.plot(fpr, tpr, label="AUC="+str(auc))
-plt.ylabel('True Positive Rate')
-plt.xlabel('False Positive Rate')
-plt.legend(loc=4)
-plt.show()
+# Compute some metrics
+nmis = normalized_mutual_info_score(labels_true=true_labels, labels_pred=pred_scores)
+amis = adjusted_mutual_info_score(labels_true=true_labels, labels_pred=pred_scores)
+auc = roc_auc_score(y_true=true_labels, y_score=pred_scores)
+print(f"Normalized Mutual Info Score: {nmis}")
+print(f"Adjusted Mutual Info Score: {amis}")
+print(f"ROC AUC Score: {auc}")
