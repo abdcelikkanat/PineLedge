@@ -133,50 +133,6 @@ class Events:
                 # Scale it to between init_time and last_time
                 self.__events[i][j] = (last_time - init_time) * self.__events[i][j] - init_time
 
-    def split_events_in_time(self, split_time):
-
-        train_events = []
-        train_pairs = []
-        test_events = []
-        test_pairs = []
-
-        for idx, events in enumerate(self.__events):
-
-            l_list, u_list = [], []
-            for e in events:
-                if e < split_time:
-                    l_list.append(e)
-                else:
-                    u_list.append(e)
-
-            if len(l_list):
-                train_events.append(l_list)
-                train_pairs.append(self.__pairs[idx])
-
-            if len(u_list):
-                test_events.append(u_list)
-                test_pairs.append(self.__pairs[idx])
-
-        te = Events(data=(train_events, train_pairs))
-
-        g = nx.Graph()
-        g.add_nodes_from(list(range(self.number_of_nodes())))
-        g.add_edges_from(te.get_pairs())
-
-        test_pos_samples = list(g.edges())
-        non_edges = list(nx.non_edges(g))
-
-        if len((non_edges)) < len(test_pos_samples):
-            raise ValueError("There is no enough number of links containing no event!")
-
-        non_edges = np.asarray(non_edges)
-        np.random.shuffle(non_edges)
-        test_neg_samples = non_edges[:len(test_pos_samples)]
-        test_neg_samples.sort(axis=1)
-        test_neg_samples = test_neg_samples.tolist()
-
-        return te, test_pos_samples, test_neg_samples
-
     # def split_events_in_time(self, split_time):
     #
     #     train_events = []
@@ -201,7 +157,51 @@ class Events:
     #             test_events.append(u_list)
     #             test_pairs.append(self.__pairs[idx])
     #
-    #     return Events(data=(train_events, train_pairs)), Events(data=(test_events, test_pairs))
+    #     te = Events(data=(train_events, train_pairs))
+    #
+    #     g = nx.Graph()
+    #     g.add_nodes_from(list(range(self.number_of_nodes())))
+    #     g.add_edges_from(te.get_pairs())
+    #
+    #     test_pos_samples = list(g.edges())
+    #     non_edges = list(nx.non_edges(g))
+    #
+    #     if len((non_edges)) < len(test_pos_samples):
+    #         raise ValueError("There is no enough number of links containing no event!")
+    #
+    #     non_edges = np.asarray(non_edges)
+    #     np.random.shuffle(non_edges)
+    #     test_neg_samples = non_edges[:len(test_pos_samples)]
+    #     test_neg_samples.sort(axis=1)
+    #     test_neg_samples = test_neg_samples.tolist()
+    #
+    #     return te, test_pos_samples, test_neg_samples
+
+    def split_events_in_time(self, split_time):
+
+        train_events = []
+        train_pairs = []
+        test_events = []
+        test_pairs = []
+
+        for idx, events in enumerate(self.__events):
+
+            l_list, u_list = [], []
+            for e in events:
+                if e < split_time:
+                    l_list.append(e)
+                else:
+                    u_list.append(e)
+
+            if len(l_list):
+                train_events.append(l_list)
+                train_pairs.append(self.__pairs[idx])
+
+            if len(u_list):
+                test_events.append(u_list)
+                test_pairs.append(self.__pairs[idx])
+
+        return Events(data=(train_events, train_pairs)), Events(data=(test_events, test_pairs))
 
     def get_subevents(self, init_time, last_time):
 
@@ -210,59 +210,106 @@ class Events:
 
         return subevents
 
-    def remove_events(self, num, connected=True):
+    # def remove_events(self, num, connected=True):
+    #
+    #     if not connected:
+    #         raise ValueError("It is not implemented for unconnected networks!")
+    #
+    #     g = nx.Graph()
+    #     g.add_edges_from(self.__pairs)
+    #
+    #     if not nx.is_connected(g):
+    #         raise ValueError("The network is not connected! {}", list(map(len, nx.connected_components(g))))
+    #
+    #     # Shuffle the edges
+    #     edges = list(g.edges())
+    #     np.random.shuffle(edges)
+    #
+    #     test_pos_samples = []
+    #     idx = 0
+    #     while len(test_pos_samples) < num:
+    #
+    #         edge = edges[idx]
+    #
+    #         g.remove_edge(u=edge[0], v=edge[1])
+    #         if nx.is_connected(g):
+    #             test_pos_samples.append([edge[0], edge[1]] if edge[0] < edge[1] else [edge[1], edge[0]])
+    #         else:
+    #             g.add_edge(edge[0], edge[1])
+    #
+    #         idx += 1
+    #
+    #         if idx == len(edges):
+    #             raise ValueError("There is no enough positive samples keeping the network connected!")
+    #
+    #     non_edges = np.asarray(list(nx.non_edges(g)))
+    #     neg_samples_idx = np.random.choice(non_edges.shape[0], size=(num, ), replace=False)
+    #     # Negative samples for testing set
+    #     test_neg_samples = non_edges[neg_samples_idx, :]
+    #     test_neg_samples.sort(axis=1)
+    #     test_neg_samples = test_neg_samples.tolist()
+    #
+    #     residual_events = []
+    #     residual_pairs = []
+    #     removed_events = []
+    #     removed_pairs = []
+    #     removed_pair_idx = [self.__pairs.index(pair) for pair in test_pos_samples]
+    #     for idx in range(len(self.__events)):
+    #         if idx in removed_pair_idx:
+    #             removed_events.append(self.__events[idx])
+    #             removed_pairs.append(self.__pairs[idx])
+    #         else:
+    #             residual_events.append(self.__events[idx])
+    #             residual_pairs.append(self.__pairs[idx])
+    #
+    #     for sample in test_neg_samples:
+    #         if sample in self.__pairs:
+    #             raise ValueError("DUR")
+    #
+    #     return Events(data=(residual_events, residual_pairs)), test_pos_samples, test_neg_samples
 
-        if not connected:
-            raise ValueError("It is not implemented for unconnected networks!")
+    def remove_events(self, num, connected=True):
 
         g = nx.Graph()
         g.add_edges_from(self.__pairs)
 
-        if not nx.is_connected(g):
-            raise ValueError("The network is not connected! {}", list(map(len, nx.connected_components(g))))
-
-        # Shuffle the edges
         edges = list(g.edges())
         np.random.shuffle(edges)
 
-        test_pos_samples = []
         idx = 0
-        while len(test_pos_samples) < num:
+        removed_pairs = []
+        while len(removed_pairs) < num:
 
-            edge = edges[idx]
+            u, v = edges[idx]
+            if u > v:
+                temp = u
+                u = v
+                v = temp
 
-            g.remove_edge(u=edge[0], v=edge[1])
+            g.remove_edge(u, v)
             if nx.is_connected(g):
-                test_pos_samples.append([edge[0], edge[1]] if edge[0] < edge[1] else [edge[1], edge[0]])
+                removed_pairs.append([u, v] if u < v else [v, u])
             else:
-                g.add_edge(edge[0], edge[1])
+                g.add_edge(u, v)
 
             idx += 1
 
             if idx == len(edges):
-                raise ValueError("There is no enough positive samples keeping the network connected!")
+                raise ValueError("Coudn't find enough sample keeping network connected!")
 
-        non_edges = np.asarray(list(nx.non_edges(g)))
-        neg_samples_idx = np.random.choice(non_edges.shape[0], size=(num, ), replace=False)
-        # Negative samples for testing set
-        test_neg_samples = non_edges[neg_samples_idx, :]
-        test_neg_samples.sort(axis=1)
-        test_neg_samples = test_neg_samples.tolist()
+        removed_events = []
+        for pair in removed_pairs:
+            removed_events.append(self[pair][1])
+
+        residual_pairs = np.asarray(list(g.edges()), dtype=np.int)
+        residual_pairs.sort(axis=1)
+        residual_pairs = residual_pairs.tolist()
 
         residual_events = []
-        residual_pairs = []
-        removed_events = []
-        removed_pairs = []
-        removed_pair_idx = [self.__pairs.index(pair) for pair in test_pos_samples]
-        for idx in range(len(self.__events)):
-            if idx in removed_pair_idx:
-                removed_events.append(self.__events[idx])
-                removed_pairs.append(self.__pairs[idx])
-            else:
-                residual_events.append(self.__events[idx])
-                residual_pairs.append(self.__pairs[idx])
+        for pair in residual_pairs:
+            residual_events.append(self[pair][1])
 
-        return Events(data=(residual_events, residual_pairs)), test_pos_samples, test_neg_samples
+        return Events(data=(residual_events, residual_pairs)), Events(data=(removed_events, removed_pairs))
 
     # def remove_events(self, num):
     #
@@ -283,10 +330,13 @@ class Events:
     #
     #     return Events(data=(residual_events, residual_pairs)), Events(data=(removed_events, removed_pairs))
 
-    def construct_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False):
+    def construct_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False, parent_events=None):
+
+        if parent_events is None:
+            parent_events = self
 
         pos_samples, possible_neg_samples = self.__pos_and_pos_neg_samples(
-            bins_num=bins_num, subsampling=subsampling, init_time=init_time, last_time=last_time, with_time=with_time
+            bins_num=bins_num, subsampling=subsampling, init_time=init_time, last_time=last_time, with_time=with_time, parent_events=parent_events
         )
 
         if with_time:
@@ -305,14 +355,17 @@ class Events:
             assert len(possible_neg_samples) >= len(pos_samples), "We couldn't find enough possible negative samples!"
 
             chosen_idx = np.random.choice(len(possible_neg_samples), size=len(pos_samples), replace=False)
-            neg_samples = (np.asarray(possible_neg_samples)[chosen_idx]).tolist()
+            neg_samples = [possible_neg_samples[idx] for idx in chosen_idx]  #(np.asarray(possible_neg_samples)[chosen_idx]).tolist()
 
         all_labels = [1] * len(pos_samples) + [0] * len(neg_samples)
         all_samples = pos_samples + neg_samples
 
         return all_labels, all_samples
 
-    def __pos_and_pos_neg_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False):
+    def __pos_and_pos_neg_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False, parent_events=None):
+
+        if parent_events is None:
+            parent_events = self
 
         all_pos_samples, all_possible_neg_samples = [], []
         if bins_num > 1:
@@ -322,7 +375,7 @@ class Events:
 
                 pos_samples, possible_neg_samples = self.__pos_and_pos_neg_samples(
                     bins_num=1, subsampling=subsampling, with_time=with_time, init_time=bounds[b],
-                    last_time=bounds[b + 1]
+                    last_time=bounds[b + 1], parent_events=parent_events
                 )
 
                 all_pos_samples += pos_samples
@@ -339,15 +392,15 @@ class Events:
             if with_time:
                 pos_samples = [(pair[0], pair[1], t) for pair, events in zip(subevents.get_pairs(), subevents.get_events()) for t in events]
             else:
-                pos_samples = [(i, j) for i, j in subevents.get_pairs()]
+                pos_samples = [(i, j, init_time, last_time) for i, j in subevents.get_pairs()]
 
             if subsampling > 0:
                 chosen_samples_indices = np.random.choice(len(pos_samples), size=subsampling, replace=False)
-                pos_samples = (np.asarray(pos_samples)[chosen_samples_indices]).tolist()
+                pos_samples = [pos_samples[idx] for idx in chosen_samples_indices] #(np.asarray(pos_samples)[chosen_samples_indices]).tolist()
 
-            possible_neg_samples = [(i, j) for i, j in utils.pair_iter(n=self.__nodes_num) if not len(subevents[(i, j)][1])]
-            if with_time:
-                possible_neg_samples = [(sample[0], sample[1], init_time, last_time) for sample in possible_neg_samples]
+            possible_neg_samples = [(i, j) for i, j in utils.pair_iter(n=parent_events.number_of_nodes()) if not len(parent_events[(i, j)][1])]
+            # if with_time:
+            possible_neg_samples = [(sample[0], sample[1], init_time, last_time) for sample in possible_neg_samples]
 
             all_pos_samples = pos_samples
             all_possible_neg_samples = possible_neg_samples
@@ -402,7 +455,7 @@ class Events:
         F = np.zeros(shape=(self.__nodes_num, self.__nodes_num), dtype=np.int)
 
         for i, j in zip(*np.triu_indices(self.__nodes_num, k=1)):
-            F[i, j] = len(self.__events[i][j])
+            F[i, j] = len(self[[i, j]][1])
 
         return F
 

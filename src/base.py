@@ -214,6 +214,58 @@ class BaseModel(torch.nn.Module):
         # From bins_counts x len(node_pairs) matrix to a vector
         return (term0 * term1 * (term2_u - term2_l)).sum(dim=0)
 
+    def get_intensity_integral_for(self, i: int, j: int, interval: torch.Tensor = None,
+                               distance: str = "squared_euc"):
+
+        x0 = mean_normalization(self._x0)
+        v = mean_normalization(self._v)
+        beta = self._beta
+
+        unique_node_pairs = torch.as_tensor([i, j], dtype=torch.int, device=self._device).t()
+
+        # Mask given node pairs
+        if self.__node_pairs_mask is not None:
+            non_idx = torch.cdist(unique_node_pairs.T.float(), self.__node_pairs_mask.T.float()).nonzero(as_tuple=True)[0]
+            idx = torch.unique(non_idx, sorted=True)
+            unique_node_pairs = unique_node_pairs[:, idx]
+
+        # Common variables
+        delta_x0 = torch.index_select(x0, dim=0, index=unique_node_pairs[0]) - \
+                   torch.index_select(x0, dim=0, index=unique_node_pairs[1])
+        delta_v = torch.index_select(v, dim=1, index=unique_node_pairs[0]) - \
+                  torch.index_select(v, dim=1, index=unique_node_pairs[1])
+        beta_ij = torch.index_select(beta, dim=0, index=unique_node_pairs[0]) + \
+                  torch.index_select(beta, dim=0, index=unique_node_pairs[1])
+
+        # if len(node_pairs.shape) == 1:
+        #     delta_x0 = delta_x0.view(1, self._dim)
+        #     delta_v = delta_v.view(self.get_num_of_bins(), 1, self._dim)
+
+        if distance != "squared_euc":
+            raise ValueError("Invalid distance metric!")
+
+        delta_xt = self.get_xt(
+            events_times_list=torch.cat([interval[:-1]] * delta_x0.shape[0]),
+            x0=torch.repeat_interleave(delta_x0, repeats=len(interval)-1, dim=0),
+            v=torch.repeat_interleave(delta_v, repeats=len(interval)-1, dim=1),
+        ).reshape((delta_x0.shape[0], len(interval)-1,  self._dim)).transpose(0, 1)
+
+        norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
+        # norm_v: a matrix of bins_counts x len(node_pairs)
+        norm_delta_v = torch.norm(delta_v, p=2, dim=2, keepdim=False)
+        inv_norm_delta_v = 1.0 / (norm_delta_v + utils.EPS)
+        delta_xt_v = (delta_xt * delta_v).sum(dim=2, keepdim=False)
+        r = delta_xt_v * inv_norm_delta_v
+
+        term0 = 0.5 * torch.sqrt(torch.as_tensor(utils.PI, device=self._device)).to(self._device) * inv_norm_delta_v
+        # term1 = torch.exp( beta_ij.unsqueeze(0) + r**2 - norm_delta_xt**2 )
+        term1 = torch.exp(beta_ij.unsqueeze(0) + r ** 2 - norm_delta_xt ** 2)
+        term2_u = torch.erf(interval[1:].expand(norm_delta_v.shape[1], len(interval)-1).t()*norm_delta_v + r)
+        term2_l = torch.erf(interval[:-1].expand(norm_delta_v.shape[1], len(interval)-1).t()*norm_delta_v + r)
+
+        # From bins_counts x len(node_pairs) matrix to a vector
+        return (term0 * term1 * (term2_u - term2_l)).sum(dim=0)
+
     def get_survival_function(self, times_list: torch.Tensor, x0: torch.Tensor = None, v: torch.Tensor = None,
                               beta: torch.Tensor = None, bin_bounds: torch.Tensor = None,
                               node_pairs: torch.tensor = None, distance: str = "squared_euc"):
