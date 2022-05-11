@@ -380,7 +380,7 @@ class BaseModel(torch.nn.Module):
         kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma))
 
         # Add a constant term to get rid of computational problems
-        kernel = kernel + utils.EPS * torch.eye(n=kernel.shape[0], m=kernel.shape[1])
+        kernel = kernel + 10*utils.EPS * torch.eye(n=kernel.shape[0], m=kernel.shape[1])
 
         if only_kernel:
             return kernel

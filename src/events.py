@@ -330,6 +330,235 @@ class Events:
     #
     #     return Events(data=(residual_events, residual_pairs)), Events(data=(removed_events, removed_pairs))
 
+    # def construct_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False, parent_events=None):
+    #
+    #     if parent_events is None:
+    #         parent_events = self
+    #
+    #     pos_samples, possible_neg_samples = self.__pos_and_pos_neg_samples(
+    #         bins_num=bins_num, subsampling=subsampling, init_time=init_time, last_time=last_time, with_time=with_time, parent_events=parent_events
+    #     )
+    #
+    #     if with_time:
+    #
+    #         time_gen = np.random.default_rng()
+    #         chosen_idx = np.random.choice(len(possible_neg_samples), size=len(pos_samples), replace=True)
+    #         neg_samples = list(map(
+    #             lambda idx: (
+    #                 possible_neg_samples[idx][0],
+    #                 possible_neg_samples[idx][1],
+    #                 (possible_neg_samples[idx][3] - possible_neg_samples[idx][2])*time_gen.random()+possible_neg_samples[idx][2]
+    #             ), chosen_idx
+    #         ))
+    #
+    #     else:
+    #         assert len(possible_neg_samples) >= len(pos_samples), "We couldn't find enough possible negative samples!"
+    #
+    #         chosen_idx = np.random.choice(len(possible_neg_samples), size=len(pos_samples), replace=False)
+    #         neg_samples = [possible_neg_samples[idx] for idx in chosen_idx]  #(np.asarray(possible_neg_samples)[chosen_idx]).tolist()
+    #
+    #     all_labels = [1] * len(pos_samples) + [0] * len(neg_samples)
+    #     all_samples = pos_samples + neg_samples
+    #
+    #     return all_labels, all_samples
+    #
+    # def __pos_and_pos_neg_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False, parent_events=None):
+    #
+    #     if parent_events is None:
+    #         parent_events = self
+    #
+    #     all_pos_samples, all_possible_neg_samples = [], []
+    #     if bins_num > 1:
+    #
+    #         bounds = np.linspace(init_time, last_time, bins_num + 1)
+    #         for b in range(bins_num):
+    #
+    #             pos_samples, possible_neg_samples = self.__pos_and_pos_neg_samples(
+    #                 bins_num=1, subsampling=subsampling, with_time=with_time, init_time=bounds[b],
+    #                 last_time=bounds[b + 1], parent_events=parent_events
+    #             )
+    #
+    #             all_pos_samples += pos_samples
+    #             all_possible_neg_samples += possible_neg_samples
+    #
+    #     else:
+    #
+    #         if init_time is None and last_time is None:
+    #             subevents = self
+    #         else:
+    #             subevents = self.get_subevents(init_time=init_time, last_time=last_time)
+    #
+    #         # Sample positive instances
+    #         if with_time:
+    #             pos_samples = [(pair[0], pair[1], t) for pair, events in zip(subevents.get_pairs(), subevents.get_events()) for t in events]
+    #         else:
+    #             pos_samples = [(i, j, init_time, last_time) for i, j in subevents.get_pairs()]
+    #
+    #         if subsampling > 0:
+    #             chosen_samples_indices = np.random.choice(len(pos_samples), size=subsampling, replace=False)
+    #             pos_samples = [pos_samples[idx] for idx in chosen_samples_indices] #(np.asarray(pos_samples)[chosen_samples_indices]).tolist()
+    #
+    #         possible_neg_samples = [(i, j) for i, j in utils.pair_iter(n=parent_events.number_of_nodes()) if not len(parent_events[(i, j)][1])]
+    #         # if with_time:
+    #         possible_neg_samples = [(sample[0], sample[1], init_time, last_time) for sample in possible_neg_samples]
+    #
+    #         all_pos_samples = pos_samples
+    #         all_possible_neg_samples = possible_neg_samples
+    #
+    #     return all_pos_samples, all_possible_neg_samples
+
+    # def construct_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False, parent_events=None):
+    #
+    #     if parent_events is None:
+    #         parent_events = self
+    #
+    #     pos_samples, possible_neg_samples = self.__pos_and_pos_neg_samples(
+    #         bins_num=bins_num, subsampling=subsampling, init_time=init_time, last_time=last_time, with_time=with_time, parent_events=parent_events
+    #     )
+    #
+    #     sample_size = min(len(pos_samples), len(possible_neg_samples))
+    #     print(f"There are possible {len(pos_samples)} bins for possible samples and {len(possible_neg_samples)} for negative samples")
+    #
+    #     assert len(pos_samples) < len(possible_neg_samples), "Positive sample set size is larger!"
+    #
+    #     chosen_idx = np.random.choice(len(possible_neg_samples), size=sample_size//2, replace=False)
+    #     neg_samples = [possible_neg_samples[idx] for idx in chosen_idx]
+    #
+    #
+    #     all_edges = list(utils.pair_iter(n=parent_events.number_of_nodes()))
+    #     np.random.shuffle(all_edges)
+    #
+    #     # Add some negative
+    #     bounds = np.linspace(init_time, last_time, bins_num + 1)
+    #     chosen_bin_idx = np.random.randint(bins_num, size=sample_size//2)
+    #     idx = 0
+    #     counter = 0
+    #     while counter < sample_size//2:
+    #         pair = all_edges[idx]
+    #         if len(parent_events[pair][1]) == 0:
+    #             neg_samples.append([pair[0], pair[1], bounds[chosen_bin_idx[counter]], bounds[chosen_bin_idx[counter]+1]])
+    #             counter += 1
+    #
+    #         idx += 1
+    #
+    #     all_labels = [1] * len(pos_samples) + [0] * len(neg_samples)
+    #     all_samples = pos_samples + neg_samples
+    #
+    #     return all_labels, all_samples
+    #
+    # def __pos_and_pos_neg_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False, parent_events=None):
+    #
+    #     if parent_events is None:
+    #         parent_events = self
+    #
+    #     all_pos_samples, all_possible_neg_samples = [], []
+    #     if bins_num > 1:
+    #
+    #         bounds = np.linspace(init_time, last_time, bins_num + 1)
+    #         for b in range(bins_num):
+    #
+    #             pos_samples, possible_neg_samples = self.__pos_and_pos_neg_samples(
+    #                 bins_num=1, subsampling=subsampling, with_time=with_time, init_time=bounds[b],
+    #                 last_time=bounds[b + 1], parent_events=parent_events
+    #             )
+    #
+    #             all_pos_samples += pos_samples
+    #             all_possible_neg_samples += possible_neg_samples
+    #
+    #     else:
+    #
+    #         if init_time is None and last_time is None:
+    #             subevents = self
+    #         else:
+    #             subevents = self.get_subevents(init_time=init_time, last_time=last_time)
+    #
+    #         # Sample positive instances
+    #         pos_samples = [(i, j, init_time, last_time) for i, j in subevents.get_pairs()]
+    #
+    #         possible_neg_samples = [(i, j) for i, j in utils.pair_iter(n=parent_events.number_of_nodes()) if not len(subevents[(i, j)][1])]
+    #         possible_neg_samples = [(sample[0], sample[1], init_time, last_time) for sample in possible_neg_samples]
+    #
+    #         all_pos_samples = pos_samples
+    #         all_possible_neg_samples = possible_neg_samples
+    #
+    #     return all_pos_samples, all_possible_neg_samples
+
+    def construct_samples(self, bins_num=1, subsampling=False, init_time=None, last_time=None, with_time=False, parent_events=None):
+
+        if parent_events is None:
+            parent_events = self
+
+        pos_samples, neg_samples = self.__pos_and_pos_neg_samples(
+            bins_num=bins_num, init_time=init_time, last_time=last_time, with_time=with_time, parent_events=parent_events
+        )
+
+        assert len(neg_samples) >= len(pos_samples), "We couldn't find enough possible negative samples!"
+
+        if subsampling:
+            chosen_idx = np.random.choice(len(neg_samples), size=len(pos_samples), replace=False)
+            neg_samples = [neg_samples[idx] for idx in chosen_idx]
+
+        all_labels = [1] * len(pos_samples) + [0] * len(neg_samples)
+        all_samples = pos_samples + neg_samples
+
+        return all_labels, all_samples
+
+    def __pos_and_pos_neg_samples(self, bins_num=1, init_time=None, last_time=None, with_time=False, parent_events=None):
+
+        if parent_events is None:
+            parent_events = self
+
+        all_pos_samples, all_possible_neg_samples = [], []
+        if bins_num > 1:
+
+            bounds = np.linspace(init_time, last_time, bins_num + 1)
+            for b in range(bins_num):
+
+                pos_samples, possible_neg_samples = self.__pos_and_pos_neg_samples(
+                    bins_num=1, with_time=with_time, init_time=bounds[b],
+                    last_time=bounds[b + 1], parent_events=parent_events
+                )
+
+                all_pos_samples += pos_samples
+                all_possible_neg_samples += possible_neg_samples
+
+        else:
+
+            if init_time is None and last_time is None:
+                subevents = self
+            else:
+                subevents = self.get_subevents(init_time=init_time, last_time=last_time)
+
+            # Sample positive instances
+            pos_samples = [(i, j, init_time, last_time) for i, j in subevents.get_pairs()]
+
+            possible_neg_samples = [(i, j) for i, j in subevents.get_pairs() if not len(subevents[(i, j)][1])]
+            possible_neg_samples = [(sample[0], sample[1], init_time, last_time) for sample in possible_neg_samples]
+
+            all_pos_samples = pos_samples
+            all_possible_neg_samples = possible_neg_samples
+
+        return all_pos_samples, all_possible_neg_samples
+
+    def remove_events(self, num):
+
+        chosen_indices = np.random.choice(len(self.__events), size=(num,), replace=False)
+
+        residual_events = []
+        residual_pairs = []
+        removed_events = []
+        removed_pairs = []
+
+        for idx in range(len(self.__events)):
+            if idx in chosen_indices:
+                removed_events.append(self.__events[idx])
+                removed_pairs.append(self.__pairs[idx])
+            else:
+                residual_events.append(self.__events[idx])
+                residual_pairs.append(self.__pairs[idx])
+
+        return Events(data=(residual_events, residual_pairs)), Events(data=(removed_events, removed_pairs))
+
     def construct_samples(self, bins_num=1, subsampling=0, init_time=None, last_time=None, with_time=False, parent_events=None):
 
         if parent_events is None:

@@ -59,8 +59,8 @@ with open(os.path.join(dataset_folder, "samples.pkl"), 'rb') as f:
 # Write the results
 with open("./results.txt", 'w') as fout:
 
-    for epochs_num in [300]: #[100, 300]: #[60, 120, 360, 720, 1024]:
-        for bins_num in [16]: #[128, 64, 16, 4, 1]: #[1, 4, 16, 64, 128]:
+    for epochs_num in [2000, ]: #[100, 300]: #[60, 120, 360, 720, 1024]:
+        for bins_num in [100, ]: #[128, 64, 16, 4, 1]: #[1, 4, 16, 64, 128]:
 
             fout.write(f"Epoch: {epochs_num}, Bin: {bins_num}\n")
 
@@ -72,7 +72,7 @@ with open("./results.txt", 'w') as fout:
             #bins_num = 10
             prior_lambda = 1e5
             batch_size = nodes_num  #1
-            learning_rate = 0.1
+            learning_rate = 0.001
             #epochs_num = 360  # 500
             steps_per_epoch = 1
             seed = utils.str2int("testing_reconstruction")
