@@ -51,16 +51,16 @@ residual_events.info()
 # Load sample files
 with open(os.path.join(dataset_folder, "samples.pkl"), 'rb') as f:
     samples_data = pkl.load(f)
-    valid_labels = samples_data["valid_labels"]
-    valid_samples = samples_data["valid_samples"]
+    #valid_labels = samples_data["valid_labels"]
+    #valid_samples = samples_data["valid_samples"]
     test_labels = samples_data["test_labels"]
     test_samples = samples_data["test_samples"]
 
 # Write the results
 with open("./results.txt", 'w') as fout:
 
-    for epochs_num in [2000, ]: #[100, 300]: #[60, 120, 360, 720, 1024]:
-        for bins_num in [100, ]: #[128, 64, 16, 4, 1]: #[1, 4, 16, 64, 128]:
+    for epochs_num in [20, ]: #[100, 300]: #[60, 120, 360, 720, 1024]:
+        for bins_num in [10, ]: #[128, 64, 16, 4, 1]: #[1, 4, 16, 64, 128]:
 
             fout.write(f"Epoch: {epochs_num}, Bin: {bins_num}\n")
 
@@ -98,21 +98,52 @@ with open("./results.txt", 'w') as fout:
             else:
                 lm.load_state_dict(torch.load(model_path))
 
-            pred_scores = []
-            for test_sample in test_samples:
+            bin_pred_scores = [[] for _ in range(sample_bins)]
+            bin_test_labels = [[] for _ in range(sample_bins)]
+            bin_test_samples = [[] for _ in range(sample_bins)]
+            for sample, label in zip(test_samples, test_labels):
+
                 pred = lm.get_intensity_integral_for(
-                    i=test_sample[0], j=test_sample[1],
-                    interval=torch.as_tensor([test_sample[2], test_sample[3]])
+                    i=sample[0], j=sample[1],
+                    interval=torch.as_tensor([sample[2], sample[3]])
                 )
-                pred_scores.append(pred)
 
-            # Compute some metrics
-            nmis = normalized_mutual_info_score(labels_true=test_labels, labels_pred=pred_scores)
-            amis = adjusted_mutual_info_score(labels_true=test_labels, labels_pred=pred_scores)
-            auc = roc_auc_score(y_true=test_labels, y_score=pred_scores)
+                bin_idx = int(sample[2] / (1.0 / sample_bins))
 
-            corr = spearmanr(np.asarray(test_labels, dtype=np.float), np.asarray(pred_scores, dtype=np.float))
-            print(f"Normalized Mutual Info Score: {nmis}")
-            print(f"Adjusted Mutual Info Score: {amis}")
-            print(f"ROC AUC Score: {auc}")
-            print(f"Spearmanr: {corr}")
+                bin_pred_scores[bin_idx].append(pred)
+                bin_test_samples[bin_idx].append(sample)
+                bin_test_labels[bin_idx].append(label)
+
+            nmis_avg, amis_avg, auc_avg, corr_avg = 0., 0., 0., 0.
+            zero_bin_counter = 0
+            for bin_idx in range(sample_bins):
+
+                if sum(bin_test_labels[bin_idx]) == 0 or sum(bin_test_labels[bin_idx]) == len(bin_test_labels[bin_idx]):
+                    zero_bin_counter += 1
+
+                else:
+
+                    fout.write(f"Sample Bin Idx: {bin_idx}\n")
+
+
+                    # Compute some metrics
+                    nmis = normalized_mutual_info_score(labels_true=bin_test_labels[bin_idx], labels_pred=bin_pred_scores[bin_idx])
+                    amis = adjusted_mutual_info_score(labels_true=bin_test_labels[bin_idx], labels_pred=bin_pred_scores[bin_idx])
+                    auc = roc_auc_score(y_true=bin_test_labels[bin_idx], y_score=bin_pred_scores[bin_idx])
+
+                    corr = spearmanr(np.asarray(bin_test_samples[bin_idx], dtype=np.float), np.asarray(bin_pred_scores[bin_idx], dtype=np.float))
+                    fout.write(f"Normalized Mutual Info Score: {nmis}\n")
+                    fout.write(f"Adjusted Mutual Info Score: {amis}\n")
+                    fout.write(f"ROC AUC Score: {auc}\n")
+                    fout.write(f"Spearmanr: {corr}\n")
+
+                    nmis_avg += nmis
+                    amis_avg += amis
+                    auc_avg += auc
+                    # corr_avg += corr
+
+        fout.write("Avg\n")
+        fout.write(f"Avg Normalized Mutual Info Score: {nmis_avg/float(sample_bins-zero_bin_counter)}\n")
+        fout.write(f"Avg Adjusted Mutual Info Score: {amis_avg/float(sample_bins-zero_bin_counter)}\n")
+        fout.write(f"Avg ROC AUC Score: {auc_avg/float(sample_bins-zero_bin_counter)}\n")
+        # fout.write(f"Avg Spearmanr: {corr_avg/float(sample_bins-zero_bin_counter)}\n")

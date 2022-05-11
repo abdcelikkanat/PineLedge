@@ -39,6 +39,7 @@ all_events.info()
 all_events.normalize(init_time=0, last_time=1.0)
 
 
+'''
 # ##################################
 # # Reconst whole network experiment #
 # ##################################
@@ -56,7 +57,7 @@ for label, sample in zip(all_labels, all_samples):
 
     test_weights.append(len(sample_events))
 
-sample_folder = os.path.join(utils.BASE_FOLDER, "experiments", f"samples_full_reconst_bins={bins_num}", dataset_name + f"_normalized")
+sample_folder = os.path.join(utils.BASE_FOLDER, "xexperiments", f"samples_full_reconst_bins={bins_num}", dataset_name + f"_normalized")
 # Create folder
 if not os.path.exists(sample_folder):
     os.makedirs(sample_folder)
@@ -78,8 +79,10 @@ with open(os.path.join(sample_folder, f"{dataset_name}_residual_combined_weighte
 with open(os.path.join(sample_folder, "samples.pkl"), 'wb') as f:
     pkl.dump({"test_labels":  all_labels, "test_samples": all_samples, "test_weights": test_weights}, f)
 
-
 '''
+
+
+
 # ##################################
 # # Link reconstruction experiment #
 # ##################################
@@ -95,9 +98,11 @@ for p in [0.05]:  #[0.05, 0.1, 0.2]:
     valid_labels, valid_samples = valid_events.construct_samples(
         bins_num=bins_num, init_time=0, last_time=1.0, with_time=False, parent_events=all_events, subsampling=subsampling
     )
+
     test_labels, test_samples = test_events.construct_samples(
         bins_num=bins_num, init_time=0, last_time=1.0, with_time=False, parent_events=all_events, subsampling=subsampling
     )
+
 
     valid_weights = []
     for label, sample in zip(valid_labels, valid_samples):
@@ -137,8 +142,6 @@ for p in [0.05]:  #[0.05, 0.1, 0.2]:
     with open(os.path.join(sample_folder, "samples.pkl"), 'wb') as f:
         pkl.dump({"valid_labels": valid_labels, "valid_samples": valid_samples, "valid_weights": valid_weights,
                   "test_labels":  test_labels, "test_samples": test_samples, "test_weights": test_weights}, f)
-'''
-
 
 
 # # ############################
