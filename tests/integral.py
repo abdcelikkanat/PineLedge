@@ -75,10 +75,10 @@ class AlgebraicEquivalence(unittest.TestCase):
         dim = 2
         nodes_num = 2
         bins_num = 2
-        # x0 = 0.5*torch.eye(nodes_num) #utils.mean_normalization(torch.rand(size=(nodes_num, dim)))
-        # v = torch.vstack((-1.0*torch.eye(nodes_num).unsqueeze(0), 1.0*torch.eye(nodes_num).unsqueeze(0))) #utils.mean_normalization(torch.rand(size=(bins_num, nodes_num, dim)))
-        x0 = torch.randn(size=(nodes_num, dim))
-        v = torch.randn(size=(bins_num, nodes_num, dim))
+        x0 = 0.5*torch.eye(nodes_num) #utils.mean_normalization(torch.rand(size=(nodes_num, dim)))
+        v = torch.vstack((-1.0*torch.eye(nodes_num).unsqueeze(0), 1.0*torch.eye(nodes_num).unsqueeze(0))) #utils.mean_normalization(torch.rand(size=(bins_num, nodes_num, dim)))
+        # x0 = torch.randn(size=(nodes_num, dim))
+        # v = torch.randn(size=(bins_num, nodes_num, dim))
 
         x0 = utils.mean_normalization(x0)
         v = utils.mean_normalization(v)
@@ -90,8 +90,8 @@ class AlgebraicEquivalence(unittest.TestCase):
                        prior_B_sigma = 2 * torch.rand(size=(1,)) - 1,
                        prior_C_Q = torch.rand(size=(4, nodes_num)),
         )
-        tl = 0.20 #+ utils.EPS
-        tr = 0.95 #- + utils.EPS
+        tl = 0.0 #+ utils.EPS
+        tr = 0.35 #- + utils.EPS
         # exact = bm.get_intensity_integral_for(i=0, j=1, interval=torch.as_tensor([tl, tr]))
         # exact = bm.get_intensity_integral(
         #     nodes=torch.as_tensor([0, 1]),
