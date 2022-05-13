@@ -33,12 +33,16 @@ class BaseModel(torch.nn.Module):
 
         # Initialize the parameters of prior function
         # scaling factor of covariance matrix
-        self._prior_lambda = torch.as_tensor(prior_lambda, dtype=torch.float, device=self._device)
+        if prior_lambda is not None:
+            self._prior_lambda = torch.as_tensor(prior_lambda, dtype=torch.float, device=self._device)
         # noise deviation
-        self._prior_sigma = torch.as_tensor(prior_sigma, dtype=torch.float, device=self._device)
+        if prior_sigma is not None:
+            self._prior_sigma = torch.as_tensor(prior_sigma, dtype=torch.float, device=self._device)
         # length-scale parameter of RBF kernel used in the construction of B
-        self._prior_B_sigma = torch.as_tensor(prior_B_sigma, dtype=torch.float, device=self._device)
-        self._prior_C_Q = prior_C_Q  # the parameter required for the construction of the matrix C
+        if prior_B_sigma is not None:
+            self._prior_B_sigma = torch.as_tensor(prior_B_sigma, dtype=torch.float, device=self._device)
+        if prior_C_Q is not None:
+            self._prior_C_Q = prior_C_Q  # the parameter required for the construction of the matrix C
         self.__R, self.__R_factor, self.__R_factor_inv = None, None, None  # Capacitance matrix
 
         # Check if the given parameters have correct shapes
@@ -239,10 +243,14 @@ class BaseModel(torch.nn.Module):
         temp_interval = temp_interval[mask]
         mask = interval[1] >= temp_interval
         temp_interval = temp_interval[mask]
-        if interval[0] != temp_interval[0]:
-            temp_interval = torch.cat((torch.as_tensor([interval[0]]), temp_interval))
-        if interval[1] != temp_interval[-1]:
-            temp_interval = torch.cat((temp_interval, torch.as_tensor([interval[1]])))
+
+        if len(temp_interval):
+            if interval[0] != temp_interval[0]:
+                temp_interval = torch.cat((torch.as_tensor([interval[0]]), temp_interval))
+            if interval[1] != temp_interval[-1]:
+                temp_interval = torch.cat((temp_interval, torch.as_tensor([interval[1]])))
+        else:
+            temp_interval = interval
         interval = temp_interval
         interval_idx = torch.div(interval, self._bin_width, rounding_mode="floor").type(torch.int)
 

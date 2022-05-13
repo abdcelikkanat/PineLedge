@@ -1,5 +1,6 @@
 import numpy as np
 import random
+from utils import *
 
 
 class NHPP:
@@ -27,7 +28,7 @@ class NHPP:
         t, J, S = self.__init_time, 1, []
         # Step 2
         U = np.random.uniform(low=0, high=1) # Random number
-        X = (-1.0/self.__lambdaValues[J]) * np.log(U) # Random variable from exponential dist for NHPP time step
+        X = (-1.0/(self.__lambdaValues[J]+utils.EPS)) * np.log(U) # Random variable from exponential dist for NHPP time step
 
         while True:
             # Step 3

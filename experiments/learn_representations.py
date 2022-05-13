@@ -11,21 +11,21 @@ dim = 2
 K = 10
 bins_num = 3
 prior_lambda = 1e5
-batch_size = 100  #1
+batch_size = 20  #1
 learning_rate = 0.01
-epochs_num = 800  # 500
-steps_per_epoch = 3
-seed = utils.str2int("testing")
+epochs_num = 1000  # 500
+steps_per_epoch = 1
+seed = utils.str2int("why")
 verbose = True
 shuffle = True
 
 ###
-dataset_name = f"three_clusters_fp_sizes=15_20_10" #f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
+dataset_name = f"two_clusters_fp_sizes=10_10_beta=2" #"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
 
 # Define dataset and model path
 dataset_path = os.path.join(
-    utils.BASE_FOLDER, "datasets", "synthetic", dataset_name, f"{dataset_name}_events.pkl"
+    utils.BASE_FOLDER, "datasets", "synthetic", dataset_name
 )
 model_folder = os.path.join(
     utils.BASE_FOLDER, "experiments", "models", model_name

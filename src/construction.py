@@ -92,11 +92,16 @@ class ConstructionModel(BaseModel):
 
         return self.__events
 
-    def save(self, file_path):
+    def save(self, folder_path):
+        events, pairs = [], []
+        for i, j in utils.pair_iter(n=self._nodes_num):
+            pair_events = self.__events[i][j]
+            if len(pair_events):
+                pairs.append([i, j])
+                events.append(pair_events)
 
-        with open(file_path, 'wb') as f:
-            pkl.dump(
-                {"pairs": torch.triu_indices(row=self._nodes_num, col=self._nodes_num, offset=1),
-                 "events": self.__events, "last_time": self._last_time
-                 }, f
-            )
+        with open(os.path.join(folder_path, "pairs.pkl"), 'wb') as f:
+            pkl.dump(pairs, f)
+
+        with open(os.path.join(folder_path, "events.pkl"), 'wb') as f:
+            pkl.dump(events, f)

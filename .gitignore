@@ -131,8 +131,6 @@ dmypy.json
 
 .idea
 experiments/logs/*
-datasets/real/*
-datasets/synthetic/*
 experiments/outputs/*html
 .DS_Store
 experiments/outputs
