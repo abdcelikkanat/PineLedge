@@ -89,7 +89,7 @@ class AlgebraicEquivalence(unittest.TestCase):
                        prior_B_sigma = 2 * torch.rand(size=(1,)) - 1,
                        prior_C_Q = torch.rand(size=(4, nodes_num)),
         )
-        tl = 0.66 #+ utils.EPS
+        tl = 0.67 #+ utils.EPS
         tr = 0.98 #- + utils.EPS
         # exact = bm.get_intensity_integral_for(i=0, j=1, interval=torch.as_tensor([tl, tr]))
         # exact = bm.get_intensity_integral(

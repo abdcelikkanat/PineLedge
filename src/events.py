@@ -29,7 +29,8 @@ class Events:
             self.__pairs = data[1]
             self.__nodes = data[2]
 
-        self.__initialize()
+        if path is not None or data is not None:
+            self.__initialize()
 
 
         # Set the seed value
@@ -53,6 +54,8 @@ class Events:
         self.__pairs = np.asarray(self.__pairs, dtype=np.int).tolist()
 
         self.__nodes = np.unique(np.asarray(self.__pairs, dtype=np.int)).tolist()
+
+        self.__initialize()
 
     def __initialize(self):
 

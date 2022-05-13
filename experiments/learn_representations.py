@@ -9,23 +9,23 @@ from src.events import Events
 # Set some paremeters
 dim = 2
 K = 10
-bins_num = 100
+bins_num = 3
 prior_lambda = 1e5
 batch_size = 100  #1
 learning_rate = 0.01
 epochs_num = 800  # 500
 steps_per_epoch = 3
-seed = utils.str2int("testing_prior")
+seed = utils.str2int("testing")
 verbose = True
 shuffle = True
 
 ###
-dataset_name = f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
+dataset_name = f"three_clusters_fp_sizes=15_20_10" #f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
 
 # Define dataset and model path
 dataset_path = os.path.join(
-    utils.BASE_FOLDER, "datasets", "real", dataset_name, f"{dataset_name}_events.pkl"
+    utils.BASE_FOLDER, "datasets", "synthetic", dataset_name, f"{dataset_name}_events.pkl"
 )
 model_folder = os.path.join(
     utils.BASE_FOLDER, "experiments", "models", model_name
@@ -43,7 +43,7 @@ all_events.normalize(init_time=0, last_time=1.0)
 
 # Get the number of nodes
 nodes_num = all_events.number_of_nodes()
-
+print(nodes_num)
 data = all_events.get_pairs(), all_events.get_events()
 
 # Run the model
