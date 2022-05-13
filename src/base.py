@@ -292,11 +292,14 @@ class BaseModel(torch.nn.Module):
         term0 = 0.5 * torch.sqrt(torch.as_tensor(utils.PI, device=self._device)).to(self._device) * inv_norm_delta_v
         term1 = torch.exp(beta_ij.unsqueeze(0) + (r ** 2) - (norm_delta_xt ** 2))
 
-        upper_bounds = interval[1:].clone() % self._bin_width
-        upper_bounds[interval[1:] == self._bin_width] = self._bin_width
-        #upper_bounds[interval_idx[1:] > 0] = upper_bounds[interval_idx[1:] > 0] - interval_idx[1:][interval_idx[1:] > 0] * self._bin_width
-        lower_bounds = interval[:-1].clone() % self._bin_width
-        #lower_bounds[interval_idx[:-1] > 0] = lower_bounds[interval_idx[:-1] > 0] - interval_idx[:-1][interval_idx[:-1] > 0] * self._bin_width
+        # TORCH HAS PRECISION PROBLEM IN REMAINDER OPERATIONS
+        upper_bounds = interval[1:].clone() #% self._bin_width
+        upper_bounds = ((self._bins_num * upper_bounds).type(dtype=torch.int) % 1) / float(self._bins_num) #upper_bounds = ((self._bins_num * upper_bounds) % (self._bins_num*self._bin_width)) / float(self._bins_num)
+        upper_bounds[(self._bins_num*interval[1:]).type(dtype=torch.int) % 1 <= utils.EPS] = self._bin_width #upper_bounds[(self._bins_num*interval[1:]) % (self._bins_num*self._bin_width) <= utils.EPS] = self._bin_width = self._bin_width
+        upper_bounds[interval[1:] == 0] = 0
+        lower_bounds = interval[:-1].clone()
+        #lower_bounds[(self._bins_num*interval[:-1]) % (self._bins_num*self._bin_width) <= utils.EPS] = 0
+        lower_bounds[(self._bins_num * interval[:-1]).type(dtype=torch.int) % 1 <= utils.EPS] = 0
         term2_u = torch.erf(upper_bounds.unsqueeze(
             1) * norm_delta_v + r)
         term2_l = torch.erf(lower_bounds.unsqueeze(
