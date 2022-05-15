@@ -21,23 +21,24 @@ import matplotlib.pyplot as plt
 # Set some paremeters
 dim = 2
 K = 10
-bins_num = 3
-prior_lambda = 1e5 #1e9 #1e5
-batch_size = 20  #1
-learning_rate = 0.01
-epochs_num = 1000 #1000  # 300
+bins_num = 32
+prior_lambda = 1e5
+#batch_size = 2  #1
+learning_rate = 0.1
+epochs_num = 100  # 500
 steps_per_epoch = 1
-seed = utils.str2int("why") # testing_dyad_sequential_dec all_events # survival_true_with_event # nhpp testing_seq2
+seed = utils.str2int("full2")
 verbose = True
 shuffle = True
+
 suffix = "" #f"_percent={0.1}" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"
 ###
-dataset_name = f"two_clusters_fp_sizes=10_10_beta=2" #f"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"three_clusters_sizes=15_20_10" # sbm_survival three_clusters_fp_sizes=15_20_10_beta=0
+dataset_name = "ia-contacts_hypertext2009" #f"two_clusters_fp_sizes=10_10_beta=2" #f"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"three_clusters_sizes=15_20_10" # sbm_survival three_clusters_fp_sizes=15_20_10_beta=0
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}{suffix}"
 
 # Define dataset and model path
 dataset_folder = os.path.join(
-    utils.BASE_FOLDER, "datasets", "synthetic", dataset_name
+    utils.BASE_FOLDER, "datasets", "real", dataset_name #synthetic
 )
 
 model_path = os.path.join(os.path.join(utils.BASE_FOLDER, "experiments", "models", model_name), f"{model_name}.model")
@@ -47,7 +48,7 @@ model_path = os.path.join(os.path.join(utils.BASE_FOLDER, "experiments", "models
 # Load the dataset
 all_events = Events(seed=seed)
 all_events.read(dataset_folder)
-
+batch_size = all_events.number_of_nodes()
 # Normalize the events
 all_events.normalize(init_time=0, last_time=1.0)
 
@@ -70,7 +71,7 @@ lm.load_state_dict(torch.load(model_path))
 # Construct samples
 
 threshold = 1
-test_intervals_num = 10
+test_intervals_num = 8
 test_intervals = torch.linspace(0, 1.0, test_intervals_num+1)
 
 samples, labels = [[] for _ in range(test_intervals_num)], [[] for _ in range(test_intervals_num)]
@@ -103,6 +104,7 @@ for b in range(test_intervals_num):
     print(f"Roc AUC, Bin Id {b}: {roc_auc}")
     pr_auc = average_precision_score(y_true=labels[b], y_score=pred_scores[b])
     print(f"PR AUC, Bin Id {b}: {pr_auc}")
+    print("")
 
 roc_auc_complete = roc_auc_score(
     y_true=[l for bin_labels in labels for l in bin_labels],
@@ -114,3 +116,16 @@ pr_auc_complete = average_precision_score(
     y_score=[s for bin_scores in pred_scores for s in bin_scores]
 )
 print(f"PR AUC in total: {pr_auc_complete}")
+
+
+# nodes_num = all_events.number_of_nodes()
+# intensities = lm.get_intensity_integral(nodes=torch.arange(nodes_num))
+#
+# M = torch.zeros(size=(nodes_num, nodes_num))
+# for i, j in utils.pair_iter(n=nodes_num):
+#     M[i, j] = intensities[utils.pairIdx2flatIdx(i=i, j=j, n=nodes_num)]
+#
+# plt.figure()
+# plt.matshow(M)
+# plt.colorbar()
+# plt.show()

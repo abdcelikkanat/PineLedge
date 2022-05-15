@@ -9,24 +9,25 @@ from src.events import Events
 # Set some paremeters
 dim = 2
 K = 10
-bins_num = 3
+bins_num = 32
 prior_lambda = 1e5
-batch_size = 20  #1
-learning_rate = 0.01
-epochs_num = 1000  # 500
+#batch_size = 2  #1
+learning_rate = 0.1
+epochs_num = 100  # 500
 steps_per_epoch = 1
-seed = utils.str2int("why")
+seed = utils.str2int("full2")
 verbose = True
 shuffle = True
 
 ###
-dataset_name = f"two_clusters_fp_sizes=10_10_beta=2" #"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
+dataset_name = "ia-contacts_hypertext2009" #f"two_clusters_fp_sizes=10_10_beta=2" #"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
 
 # Define dataset and model path
 dataset_path = os.path.join(
-    utils.BASE_FOLDER, "datasets", "synthetic", dataset_name
+    utils.BASE_FOLDER, "datasets", "real", dataset_name  #synthetic
 )
+
 model_folder = os.path.join(
     utils.BASE_FOLDER, "experiments", "models", model_name
 )
@@ -37,7 +38,7 @@ model_path = os.path.join(
 # Load the dataset
 all_events = Events(seed=seed)
 all_events.read(dataset_path)
-
+batch_size = all_events.number_of_nodes()
 # Normalize the events
 all_events.normalize(init_time=0, last_time=1.0)
 
