@@ -159,7 +159,7 @@ class BaseModel(torch.nn.Module):
 
     def get_intensity_integral(self, nodes: torch.tensor, x0: torch.Tensor = None, v: torch.Tensor = None,
                                beta: torch.Tensor = None, bin_bounds: torch.Tensor = None,
-                               distance: str = "squared_euc"):
+                               distance: str = "squared_euc", sum=True):
 
         if x0 is None or v is None:
             x0 = mean_normalization(self._x0)
@@ -220,6 +220,9 @@ class BaseModel(torch.nn.Module):
         lower_bounds = bin_bounds[:-1] - self._bin_width * torch.arange(len(bin_bounds)-1) #* (bin_bounds[0] / self._bin_width)
         term2_u = torch.erf(upper_bounds.unsqueeze(1) * norm_delta_v + r)  # term2_u = torch.erf(bin_bounds[1:].expand(norm_delta_v.shape[1], len(bin_bounds)-1).t()*norm_delta_v + r)
         term2_l = torch.erf(lower_bounds.unsqueeze(1) * norm_delta_v + r)  # term2_l = torch.erf(bin_bounds[:-1].expand(norm_delta_v.shape[1], len(bin_bounds)-1).t()*norm_delta_v + r)
+
+        if not sum:
+            return term0 * term1 * (term2_u - term2_l)
 
         return (term0 * term1 * (term2_u - term2_l)).sum(dim=0)
 

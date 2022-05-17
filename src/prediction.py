@@ -147,6 +147,38 @@ class PredictionModel(torch.nn.Module):
             beta=self._beta, bin_bounds=self._time_samples
         )
 
+    def get_intensity_integral_for_bins(self, boundaries: torch.Tensor, sample_size_per_bin=100):
+
+        assert boundaries[0] == self._pred_init_time and boundaries[-1] == self._pred_last_time, \
+            "The first and the last time points are wrong!"
+
+        # If the sample_size_per_bin is integer, then sample an equal number of points from the timeline
+        if type(sample_size_per_bin) is int:
+            sample_size_per_bin = sample_size_per_bin * torch.ones(size=(len(boundaries)-1, ), dtype=torch.int)
+
+        # Sample 'sample_size_per_bin[i]' number of points for each interval
+        chosen_time_points = torch.as_tensor([boundaries[0]])
+        for b in range(len(boundaries)-1):
+            bin_samples = torch.linspace(start=boundaries[b], end=boundaries[b+1], steps=sample_size_per_bin[b]+1)
+            chosen_time_points = torch.cat((chosen_time_points, bin_samples[1:]))
+
+        expected_v = self.get_expected_vt(times_list=chosen_time_points)
+        nodes = torch.arange(self._nodes_num)
+
+        # len(sum(sample_size_per_bin)) x (self._nodes_num x (self._nodes_num-1)/2) matrix
+        intensities = self._lm.get_intensity_integral(
+            nodes=nodes, x0=self._x_init, v=expected_v[:-1, :, :],
+            beta=self._beta, bin_bounds=chosen_time_points, sum=False
+        )
+
+        # Sum the intensities integrals by choosing correct indices
+        index_cumsum = torch.cumsum(sample_size_per_bin, dim=0) - 1
+        intensities_cumsum = torch.cumsum(intensities, dim=0)
+        integrals = torch.index_select(intensities_cumsum, index=index_cumsum, dim=0)
+
+        # A matrix of size ( len(boundaries)-1) x (self._nodes_num x (self._nodes_num-1)/2) )
+        return integrals
+
     def get_negative_log_likelihood(self, event_times: torch.Tensor, event_node_pairs: torch.Tensor):
 
         nodes = torch.arange(self._nodes_num)
