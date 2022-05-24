@@ -21,7 +21,7 @@ batch_size = 20  #1
 learning_rate = 0.01
 epochs_num = 1000  # 500
 steps_per_epoch = 1
-seed = utils.str2int("why") # testing_dyad_sequential_dec all_events # survival_true_with_event # nhpp testing_seq2
+seed = utils.str2int("why_no_beta") # testing_dyad_sequential_dec all_events # survival_true_with_event # nhpp testing_seq2
 verbose = True
 shuffle = True
 suffix = "" #f"_percent={0.1}" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"

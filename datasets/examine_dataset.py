@@ -9,9 +9,11 @@ import matplotlib.pyplot as plt
 # Set some parameters
 suffix = ""
 
-dataset_name = "three_clusters_fp_sizes=15_20_10_beta=-2.0"  #"four_nodes_fp"
+dataset_name = "ia-contact" #"three_clusters_fp_sizes=15_20_10_beta=-2.0"  #"four_nodes_fp"
 # Define dataset and model path
-dataset_path = os.path.join(utils.BASE_FOLDER, "datasets", "synthetic", dataset_name, f"{dataset_name}_events.pkl")
+#dataset_path = os.path.join(utils.BASE_FOLDER, "datasets", "synthetic", dataset_name, f"{dataset_name}_events.pkl")
+dataset_path = os.path.join(utils.BASE_FOLDER, "datasets", "real", dataset_name)
+
 
 # Load the dataset
 all_events = Events()

@@ -263,12 +263,6 @@ class BaseModel(torch.nn.Module):
 
         unique_node_pairs = torch.as_tensor([i, j], dtype=torch.int, device=self._device).t()
 
-        # Mask given node pairs
-        if self.__node_pairs_mask is not None:
-            non_idx = torch.cdist(unique_node_pairs.T.float(), self.__node_pairs_mask.T.float()).nonzero(as_tuple=True)[0]
-            idx = torch.unique(non_idx, sorted=True)
-            unique_node_pairs = unique_node_pairs[:, idx]
-
         # Common variables
         delta_x0 = torch.index_select(x0, dim=0, index=unique_node_pairs[0]) - \
                    torch.index_select(x0, dim=0, index=unique_node_pairs[1])

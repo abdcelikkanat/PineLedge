@@ -20,7 +20,7 @@ verbose = True
 shuffle = True
 
 ###
-dataset_name = "ia-contacts_hypertext2009" #f"two_clusters_fp_sizes=10_10_beta=2" #"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
+dataset_name = f"lyonschool_sparsified_p=0.1" #"lyonschool" #"ia-contacts_hypertext2009" #f"two_clusters_fp_sizes=10_10_beta=2" #"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
 
 # Define dataset and model path
