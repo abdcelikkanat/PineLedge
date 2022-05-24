@@ -21,22 +21,25 @@ import matplotlib.pyplot as plt
 # Set some paremeters
 dim = 2
 K = 10
-bins_num = 50
+bins_num = 32
 prior_lambda = 1e5
-#batch_size = 20  #1
-learning_rate = 0.001
-epochs_num = 2000  # 500
+#batch_size = 2  #1
+learning_rate = 0.1
+epochs_num = 100  # 500
 steps_per_epoch = 1
-seed = utils.str2int("full")
+seed = utils.str2int("full2")
 verbose = True
 shuffle = True
+
 suffix = "" #f"_percent={0.1}" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"
 ###
-#dataset_name= f"two_clusters_fp_sizes=10_10_beta=2" #f"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"three_clusters_sizes=15_20_10" # sbm_survival three_clusters_fp_sizes=15_20_10_beta=0
-dataset_name = f"ia-contact" 
-#dataset_name = f"ia-contacts_hypertext2009"
-test_intervals_num = 50
+dataset_name = "ia-contacts_hypertext2009" #f"two_clusters_fp_sizes=10_10_beta=2" #f"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"three_clusters_sizes=15_20_10" # sbm_survival three_clusters_fp_sizes=15_20_10_beta=0
+model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}{suffix}"
 
+# Define dataset and model path
+dataset_folder = os.path.join(
+    utils.BASE_FOLDER, "datasets", "real", dataset_name #synthetic
+)
 
 # Define dataset and model path
 #dataset_folder = os.path.join(utils.BASE_FOLDER, "datasets", "synthetic", dataset_name)

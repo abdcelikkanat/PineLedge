@@ -159,7 +159,7 @@ class BaseModel(torch.nn.Module):
 
     def get_intensity_integral(self, nodes: torch.tensor, x0: torch.Tensor = None, v: torch.Tensor = None,
                                beta: torch.Tensor = None, bin_bounds: torch.Tensor = None,
-                               distance: str = "squared_euc"):
+                               distance: str = "squared_euc", sum=True):
 
         if x0 is None or v is None:
             x0 = mean_normalization(self._x0)
@@ -221,6 +221,9 @@ class BaseModel(torch.nn.Module):
         term2_u = torch.erf(upper_bounds.unsqueeze(1) * norm_delta_v + r)  # term2_u = torch.erf(bin_bounds[1:].expand(norm_delta_v.shape[1], len(bin_bounds)-1).t()*norm_delta_v + r)
         term2_l = torch.erf(lower_bounds.unsqueeze(1) * norm_delta_v + r)  # term2_l = torch.erf(bin_bounds[:-1].expand(norm_delta_v.shape[1], len(bin_bounds)-1).t()*norm_delta_v + r)
 
+        if not sum:
+            return term0 * term1 * (term2_u - term2_l)
+
         return (term0 * term1 * (term2_u - term2_l)).sum(dim=0)
 
     def get_intensity_integral_for(self, i: int, j: int, interval: torch.Tensor = None, distance: str = "squared_euc"):
@@ -259,12 +262,6 @@ class BaseModel(torch.nn.Module):
         beta = self._beta
 
         unique_node_pairs = torch.as_tensor([i, j], dtype=torch.int, device=self._device).t()
-
-        # Mask given node pairs
-        if self.__node_pairs_mask is not None:
-            non_idx = torch.cdist(unique_node_pairs.T.float(), self.__node_pairs_mask.T.float()).nonzero(as_tuple=True)[0]
-            idx = torch.unique(non_idx, sorted=True)
-            unique_node_pairs = unique_node_pairs[:, idx]
 
         # Common variables
         delta_x0 = torch.index_select(x0, dim=0, index=unique_node_pairs[0]) - \

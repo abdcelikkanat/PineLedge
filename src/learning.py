@@ -233,7 +233,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         # Forward pass
         average_batch_loss = self.forward(
             nodes=sampled_nodes, event_times=valueC, event_node_pairs=batch_node_pairs, batch_num=batch_num
-        ) / (self.__batch_size * (self.__batch_size-1) / 2.0 )
+        ) #/ self.__batch_size
 
         return average_batch_loss
 

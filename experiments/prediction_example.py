@@ -21,18 +21,15 @@ seed = utils.str2int("testing_prediction")
 verbose = True
 split_time = 0.9
 
-learn = True
+learn = False
 
 ###
-dataset_name = f"three_clusters_fp_sizes=15_20_10"
+dataset_name = f"three_clusters_fp_sizes=15_20_10_beta=1"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
 
 # Define dataset and model path
 dataset_folder = os.path.join(
     utils.BASE_FOLDER, "datasets", "synthetic", dataset_name
-)
-dataset_path = os.path.join(
-    dataset_folder, f"{dataset_name}_events.pkl"
 )
 model_folder = os.path.join(
     utils.BASE_FOLDER, "experiments", "models", model_name
@@ -46,7 +43,7 @@ anim_path = os.path.join(
 
 # Load the dataset
 all_events = Events(seed=seed)
-all_events.read(dataset_path)
+all_events.read(dataset_folder)
 
 # Normalize the events
 all_events.normalize(init_time=0, last_time=1.0)
@@ -97,6 +94,7 @@ intensity_list = pm.get_log_intensity(
     node_pairs=flat_test_pairs
 )
 print(intensity_list)
+print(pm.get_intensity_integral(nodes=torch.arange(3)))
 
 # Compute negative log-likelihood
 nll_list = pm.get_negative_log_likelihood(
@@ -104,3 +102,9 @@ nll_list = pm.get_negative_log_likelihood(
     event_node_pairs=flat_test_pairs
 )
 # print(nll_list)
+
+print("-----")
+s = pm.get_intensity_integral_for_bins(boundaries=torch.as_tensor([0.9, 0.92, 0.98, 1.0]), sample_size_per_bin=torch.as_tensor([5, 4, 7]))
+
+print(s.shape)
+print(s)
