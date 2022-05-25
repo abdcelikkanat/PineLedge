@@ -2,6 +2,7 @@ import random
 import numpy as np
 import torch
 from utils import *
+import time
 
 
 class BaseModel(torch.nn.Module):
@@ -405,8 +406,10 @@ class BaseModel(torch.nn.Module):
 
     def get_negative_log_likelihood(self, nodes: torch.Tensor, event_times: torch.Tensor, event_node_pairs: torch.Tensor):
 
+        it = time.time()
         integral_term = -self.get_intensity_integral(nodes=nodes).sum()
 
+        it = time.time()
         non_integral_term = self.get_log_intensity(times_list=event_times, node_pairs=event_node_pairs).sum()
 
         return -( non_integral_term + integral_term)
@@ -467,8 +470,8 @@ class BaseModel(torch.nn.Module):
         return L
 
     def _get_C_factor(self):
-        # K x N matrix
-        return torch.softmax(self._prior_C_Q, dim=0)
+        # N x K matrix
+        return torch.softmax(self._prior_C_Q, dim=1)
 
     def _get_D_factor(self):
         # D x D matrix
@@ -485,7 +488,7 @@ class BaseModel(torch.nn.Module):
         # B x B matrix
         B_factor = self._get_B_factor(bin_centers1=middle_bounds, bin_centers2=middle_bounds)
         # N x K matrix where K is the community size
-        C_factor = self._get_C_factor().T
+        C_factor = self._get_C_factor()
         # D x D matrix
         D_factor = self._get_D_factor()
 
@@ -500,7 +503,7 @@ class BaseModel(torch.nn.Module):
         sigma_sq = torch.sigmoid(self._prior_sigma)
         sigma_sq_inv = 1.0 / sigma_sq
         final_dim = self.get_number_of_nodes() * self._bins_num * self._dim
-        reduced_dim = self._prior_C_Q.shape[0] * self._bins_num * self._dim
+        reduced_dim = self._prior_C_Q.shape[1] * self._bins_num * self._dim
 
         # Compute the capacitance matrix R only if batch_num == 0
         if batch_num == 0:

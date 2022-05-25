@@ -30,7 +30,7 @@ def _get_B_factor(prior_B_sigma, bin_centers1: torch.Tensor, bin_centers2: torch
 
 def _get_C_factor(prior_C_Q):
 
-    # K x N matrix
+    # N x K matrix
     return prior_C_Q #torch.softmax(prior_C_Q, dim=0)
 
 def _get_D_factor(dim):
@@ -39,8 +39,8 @@ def _get_D_factor(dim):
 
 
 
-time_interval_lengths = [10.] * 20
-cluster_sizes = [4]*25 #[15, 20, 10]
+time_interval_lengths = [10.] * 5 #20
+cluster_sizes = [8]*2 #[15, 20, 10]
 
 dim = 2
 nodes_num = sum(cluster_sizes)
@@ -48,7 +48,7 @@ bins_num = len(time_interval_lengths)
 
 prior_lambda = 1e-1
 prior_sigma = 0.2
-prior_B_sigma = 1e+4 #1e-4
+prior_B_sigma = 1e-4 #1e-4
 
 beta_coeff = 2.5
 
@@ -90,15 +90,15 @@ B_factor = _get_B_factor(
     prior_B_sigma=torch.as_tensor(prior_B_sigma), bin_centers1=bin_centers, bin_centers2=bin_centers, only_kernel=True
 )
 
-prior_C_Q = torch.zeros(size=(K, sum(cluster_sizes)), dtype=torch.float)
+prior_C_Q = torch.zeros(size=(sum(cluster_sizes), K), dtype=torch.float)
 for k in range(K):
-    prior_C_Q[k, range(sum(cluster_sizes[:k]), sum(cluster_sizes[:k+1]))] = 1
+    prior_C_Q[range(sum(cluster_sizes[:k]), sum(cluster_sizes[:k+1])), k] = 1
 '''
 prior_C_Q[0, range(sum(cluster_sizes[:1]))] = 1
 prior_C_Q[1, range(sum(cluster_sizes[:1]), sum(cluster_sizes[:2]))] = 1
 prior_C_Q[2, range(sum(cluster_sizes[:2]), sum(cluster_sizes[:3]))] = 1
 '''
-C_factor = _get_C_factor(prior_C_Q).T
+C_factor = _get_C_factor(prior_C_Q)
 
 #C_factor = torch.ones_like(C_factor)
 D_factor = torch.eye(n=dim)

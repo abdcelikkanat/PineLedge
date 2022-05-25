@@ -15,19 +15,18 @@ import pickle as pkl
 # Set some paremeters
 dim = 2
 K = 10
-bins_num = 3
+bins_num = 32
 prior_lambda = 1e5
-batch_size = 20  #1
-learning_rate = 0.01
-epochs_num = 1000  # 500
+#batch_size = 2  #1
+learning_rate = 0.1
+epochs_num = 100  # 500
 steps_per_epoch = 1
-seed = utils.str2int("why_no_beta") # testing_dyad_sequential_dec all_events # survival_true_with_event # nhpp testing_seq2
+seed = utils.str2int("full2")
 verbose = True
 shuffle = True
-suffix = "" #f"_percent={0.1}" #f"_percent={0.01}" #f"_percent={0.2}" #"_nhpp" #"_survival"
-
+suffix = ""
 ###
-dataset_name = f"two_clusters_fp_sizes=10_10_beta=2" #f"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"three_clusters_sizes=15_20_10" # sbm_survival three_clusters_fp_sizes=15_20_10_beta=0
+dataset_name = f"2_clusters_mg_B=5_noise_s=0.2_rbf-s=0.0001_lambda=0.1_sizes=8_8_beta=2.5"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}{suffix}"
 
 # Define dataset and model path
@@ -47,6 +46,7 @@ anim_path = os.path.join(
 # Load the dataset
 all_events = Events(seed=seed)
 all_events.read(dataset_folder)
+batch_size = all_events.number_of_nodes()
 
 # Normalize the events
 all_events.normalize(init_time=0, last_time=1.0)

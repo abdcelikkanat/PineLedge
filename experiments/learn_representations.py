@@ -31,12 +31,12 @@ verbose = True
 shuffle = True
 
 ###
-dataset_name = f"lyonschool_sparsified_p=0.1" #"lyonschool" #"ia-contacts_hypertext2009" #f"two_clusters_fp_sizes=10_10_beta=2" #"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
+dataset_name = f"2_clusters_mg_B=5_noise_s=0.2_rbf-s=0.0001_lambda=0.1_sizes=8_8_beta=2.5" #"lyonschool" #"ia-contacts_hypertext2009" #f"two_clusters_fp_sizes=10_10_beta=2" #"four_nodes_fp" #f"two_clusters_fp_sizes=10_10_beta=1" #f"fb_forum" #f"three_clusters_fp_sizes=15_20_10"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}"
 
 # Define dataset and model path
 dataset_path = os.path.join(
-    utils.BASE_FOLDER, "datasets", "real", dataset_name  #synthetic
+    utils.BASE_FOLDER, "datasets", "synthetic", dataset_name  # synthetic # real
 )
 
 model_folder = os.path.join(
@@ -56,7 +56,6 @@ all_events.normalize(init_time=0, last_time=1.0)
 
 # Get the number of nodes
 nodes_num = all_events.number_of_nodes()
-print(nodes_num)
 data = all_events.get_pairs(), all_events.get_events()
 
 # Run the model

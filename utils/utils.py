@@ -5,14 +5,17 @@ import numpy as np
 import math
 import os
 
+# Path definitions
 BASE_FOLDER = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
+# Constants
 EPS = 1e-6
 INF = 1e+6
 PI = math.pi
 LOG2PI = math.log(2*PI)
 
 softplus = torch.nn.Softplus()
+
 
 def str2int(text):
 
@@ -44,82 +47,39 @@ def pairIdx2flatIdx(i, j, n, undirected=True):
         return i*n + j
 
 
+def remainder(x: torch.Tensor, y: float):
 
-#
-# def collate_fn(batch):
-#     node_pairs = []
-#     events = []
-#     for p, e in batch:
-#         node_pairs.append(p.numpy())
-#         events.append(e)
-#
-#     return torch.tensor(node_pairs).transpose(0, 1), events
+    # TORCH REMAINDER HAS A PROBLEM
+    #return torch.remainder(x, y)
 
-#
+    return torch.as_tensor([math.remainder(val, y) for val in x])
+
+
 # def collate_fn(batch):
 #
-#     node_indices = []
-#     events_dict = dict()
-#     for idx, idx_dict in batch:
-#         node_indices.append(idx)
-#         events_dict[idx] = idx_dict
-#
-#     assert len(node_indices) > 1, "The batch size must be greater than 1"
-#
-#     sorted_indices = sorted(node_indices)
-#
 #     node_pairs = []
-#     events = []
-#     for i in range(len(sorted_indices)):
-#         for j in range(i+1, len(sorted_indices)):
-#             u, v = sorted_indices[i], sorted_indices[j]
-#             node_pairs.append([u, v])
-#             events.append(torch.as_tensor(events_dict[u][v]))
+#     event_lists = []
 #
-#     return torch.tensor(node_pairs).transpose(0, 1), events
-
-
-def collate_fn(batch):
-
-    node_pairs = []
-    event_lists = []
-
-    for items in batch:
-        for pair, events in items:
-            node_pairs.append(pair)
-            event_lists.append(torch.as_tensor(events))
-
-    return torch.as_tensor(node_pairs).transpose(0, 1), event_lists
-    #
-    # u, v, events = batch[0]
-    # #node_pairs = torch.as_tensor([[u], [v]])
-    # node_pairs = []
-    # events_list = []
-    # for u, v, events in batch:
-    #     node_pairs.append([u, v])
-    #     events_list.append(torch.as_tensor(events))
-    # # print(events)
-    # node_pairs = torch.as_tensor(node_pairs).transpose(0, 1)
-    # # return node_pairs, [torch.as_tensor(events)]
-    # return node_pairs, events_list
-
-# def vectorize(x: torch.Tensor):
+#     for items in batch:
+#         for pair, events in items:
+#             node_pairs.append(pair)
+#             event_lists.append(torch.as_tensor(events))
 #
-#     return x.flatten(-1)
-#
-#
-# def unvectorize(x: torch.Tensor, size):
-#
-#     return x.reshape((size[0], size[1], size[2]))
+#     return torch.as_tensor(node_pairs).transpose(0, 1), event_lists
+
 
 def vectorize(x: torch.Tensor):
 
-    return x.transpose(-2, -1).flatten(-2)
+    return x.flatten(-2)
+
+    # return x.transpose(-2, -1).flatten(-2)
 
 
 def unvectorize(x: torch.Tensor, size):
 
-    return x.reshape((size[0], size[2], size[1])).transpose(-1, -2)
+    return x.reshape((size[0], size[1], size[2]))
+
+    # return x.reshape((size[0], size[2], size[1])).transpose(-1, -2)
 
 
 def mean_normalization(x: torch.Tensor):
