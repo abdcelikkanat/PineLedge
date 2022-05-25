@@ -155,6 +155,7 @@ embs_pred = bm.get_xt(
     x0=torch.repeat_interleave(bm.get_x0(), repeats=len(frame_times), dim=0),
     v=torch.repeat_interleave(bm.get_v(), repeats=len(frame_times), dim=1)
 ).reshape((bm.get_number_of_nodes(), len(frame_times),  bm.get_dim())).transpose(0, 1).detach().numpy()
+torch.save(bm.state_dict(), os.path.join(dataset_folder, "bm.model"))
 
 # Construct the data
 events_list, events_pairs = [], []
@@ -175,4 +176,3 @@ node2group, group2node = node2group_data["node2group"], node2group_data["group2n
 node2color = [node2group[idx] for idx in range(nodes_num)]
 anim = Animation(embs_pred, data=data, fps=12, node2color=node2color, frame_times=frame_times.numpy())
 anim.save(os.path.join(dataset_folder, "gt_animation.mp4"))
-# anim.save(os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/", "gt_animation.mp4"))

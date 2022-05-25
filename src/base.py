@@ -96,7 +96,7 @@ class BaseModel(torch.nn.Module):
         # Compute the event indices and residual times
         events_bin_indices = torch.div(events_times_list, self._bin_width, rounding_mode='floor').type(torch.int)
         #################### TORCH HAS REMAINDER PROBLEM
-        residual_time = (torch.round(100*self._bins_num*events_times_list) % (100*self._bins_num*self._bin_width)) / float(100*self._bins_num) #residual_time = events_times_list % self._bin_width
+        residual_time = utils.remainder(events_times_list, self._bin_width) #residual_time = (torch.round(100*self._bins_num*events_times_list) % (100*self._bins_num*self._bin_width)) / float(100*self._bins_num) #residual_time = events_times_list % self._bin_width
         events_bin_indices[events_bin_indices == self._bins_num] = self._bins_num - 1
 
         # Compute the total displacements for each time-intervals and append a zero column to get rid of indexing issues
@@ -301,12 +301,12 @@ class BaseModel(torch.nn.Module):
 
         # TORCH HAS PRECISION PROBLEM IN REMAINDER OPERATIONS
         upper_bounds = interval[1:].clone() #% self._bin_width
-        upper_bounds = (torch.round((100*self._bins_num * upper_bounds)) % 100) / float(100*self._bins_num) #upper_bounds = ((self._bins_num * upper_bounds) % (self._bins_num*self._bin_width)) / float(self._bins_num)
-        upper_bounds[torch.round((100*self._bins_num*interval[1:])) % 100 <= utils.EPS] = self._bin_width #upper_bounds[(self._bins_num*interval[1:]) % (self._bins_num*self._bin_width) <= utils.EPS] = self._bin_width = self._bin_width
+        upper_bounds = utils.remainder(upper_bounds, self._bin_width) #upper_bounds = (torch.round((100*self._bins_num * upper_bounds)) % 100) / float(100*self._bins_num) #upper_bounds = ((self._bins_num * upper_bounds) % (self._bins_num*self._bin_width)) / float(self._bins_num)
+        upper_bounds[utils.remainder(interval[1:], self._bin_width) <= utils.EPS] = self._bin_width #upper_bounds[torch.round((100*self._bins_num*interval[1:])) % 100 <= utils.EPS] = self._bin_width #upper_bounds[(self._bins_num*interval[1:]) % (self._bins_num*self._bin_width) <= utils.EPS] = self._bin_width = self._bin_width
         upper_bounds[interval[1:] == 0] = 0
         lower_bounds = interval[:-1].clone()
         #lower_bounds[(self._bins_num*interval[:-1]) % (self._bins_num*self._bin_width) <= utils.EPS] = 0
-        lower_bounds[(torch.round(100*self._bins_num * interval[:-1])) % 100 <= utils.EPS] = 0
+        lower_bounds[utils.remainder(interval[:-1], self._bin_width) <= utils.EPS] = 0 #lower_bounds[(torch.round(100*self._bins_num * interval[:-1])) % 100 <= utils.EPS] = 0
         term2_u = torch.erf(upper_bounds.unsqueeze(
             1) * norm_delta_v + r)
         term2_l = torch.erf(lower_bounds.unsqueeze(
