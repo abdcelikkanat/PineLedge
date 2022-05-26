@@ -294,7 +294,7 @@ class Events:
                 v = temp
 
             g.remove_edge(u, v)
-            if nx.is_connected(g) and connected:
+            if nx.is_connected(g) or not connected:
                 removed_pairs.append([u, v] if u < v else [v, u])
             else:
                 g.add_edge(u, v)
