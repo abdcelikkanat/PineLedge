@@ -39,39 +39,30 @@ def _get_D_factor(dim):
 
 
 
-time_interval_lengths = [10.] * 5 #20
-cluster_sizes = [8]*2 #[15, 20, 10]
+time_interval_lengths = [100.] * 10
+cluster_sizes = [5] * 25
 
 dim = 2
 nodes_num = sum(cluster_sizes)
 bins_num = len(time_interval_lengths)
 
 prior_lambda = 1e-1
-prior_sigma = 0.2
+prior_sigma = 1e-2
 prior_B_sigma = 1e-4 #1e-4
 
-beta_coeff = 2.5
+beta_coeff = 0.5
 
 # Set the parameters
 verbose = True
 seed = 0
 
 # Define the folder and dataset paths
-dataset_name = f"{len(cluster_sizes)}_clusters_mg_B={bins_num}_noise_s={prior_sigma}_rbf-s={prior_B_sigma}_lambda={prior_lambda}_sizes="+"_".join(map(str, cluster_sizes))+f"_beta={beta_coeff}"
-# dataset_folder = os.path.join(
-#     utils.BASE_FOLDER,
-#     "datasets", "synthetic", dataset_name
-# )
+dataset_name = f"{len(cluster_sizes)}_clusters_mg_B={bins_num}_noise_s={prior_sigma}_rbf-s={prior_B_sigma}_lambda={prior_lambda}_sizes="+"_".join(map(str, cluster_sizes))+f"_beta={beta_coeff}"+f"_timescale={time_interval_lengths[0]}"
+# dataset_folder = os.path.join(utils.BASE_FOLDER, "datasets", "synthetic", dataset_name)
 dataset_folder = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/", dataset_name)
-node2group_path = os.path.join(
-    dataset_folder, f"{dataset_name}_node2group.pkl"
-)
+node2group_path = os.path.join(dataset_folder, f"{dataset_name}_node2group.pkl")
 
 
-# x0_c1 = np.random.multivariate_normal(mean=[-5, 5], cov=np.eye(dim, dim), size=(cluster_sizes[0], ))
-# x0_c2 = np.random.multivariate_normal(mean=[5, 5], cov=np.eye(dim, dim), size=(cluster_sizes[1], ))
-# x0_c3 = np.random.multivariate_normal(mean=[0, -5], cov=np.eye(dim, dim), size=(cluster_sizes[2], ))
-# x0 = np.vstack((np.vstack((x0_c1, x0_c2)), x0_c3))
 x0 = np.empty(shape=(0, dim))
 for c in range(len(cluster_sizes)):
     cluster_mean = np.random.multivariate_normal(mean=np.zeros(shape=(dim, )), cov=36*np.eye(dim, dim), size=(1, ))[0]
@@ -93,11 +84,6 @@ B_factor = _get_B_factor(
 prior_C_Q = torch.zeros(size=(sum(cluster_sizes), K), dtype=torch.float)
 for k in range(K):
     prior_C_Q[range(sum(cluster_sizes[:k]), sum(cluster_sizes[:k+1])), k] = 1
-'''
-prior_C_Q[0, range(sum(cluster_sizes[:1]))] = 1
-prior_C_Q[1, range(sum(cluster_sizes[:1]), sum(cluster_sizes[:2]))] = 1
-prior_C_Q[2, range(sum(cluster_sizes[:2]), sum(cluster_sizes[:3]))] = 1
-'''
 C_factor = _get_C_factor(prior_C_Q)
 
 #C_factor = torch.ones_like(C_factor)
@@ -126,7 +112,7 @@ x0 = torch.as_tensor(x0, dtype=torch.float)
 # plt.show()
 v = torch.as_tensor(v, dtype=torch.float)
 beta = torch.as_tensor(beta, dtype=torch.float)
-
+''' '''
 # Check if the file exists
 assert not os.path.exists(dataset_folder), "This folder path exists!"
 
@@ -157,6 +143,7 @@ embs_pred = bm.get_xt(
 ).reshape((bm.get_number_of_nodes(), len(frame_times),  bm.get_dim())).transpose(0, 1).detach().numpy()
 torch.save(bm.state_dict(), os.path.join(dataset_folder, "bm.model"))
 
+'''
 # Construct the data
 events_list, events_pairs = [], []
 events_dict = cm.get_events()
@@ -166,6 +153,13 @@ for i, j in utils.pair_iter(n=nodes_num):
         events_list.append(events_pair)
         events_pairs.append([i, j])
 data = events_pairs, events_list
+'''
+import pickle
+with open(os.path.join(dataset_folder, "events.pkl"), 'rb') as f:
+    events = pickle.load(f)
+with open(os.path.join(dataset_folder, "pairs.pkl"), 'rb') as f:
+    pairs = pickle.load(f)
+data = pairs, events
 
 # Read the group information
 node2group_filepath = os.path.join(dataset_folder, f"{dataset_name}_node2group.pkl")
@@ -174,5 +168,7 @@ with open(node2group_filepath, "rb") as f:
 node2group, group2node = node2group_data["node2group"], node2group_data["group2node"]
 # Animate
 node2color = [node2group[idx] for idx in range(nodes_num)]
+# anim = Animation(embs_pred, fps=12, node2color=node2color, frame_times=frame_times.numpy())
 anim = Animation(embs_pred, data=data, fps=12, node2color=node2color, frame_times=frame_times.numpy())
 anim.save(os.path.join(dataset_folder, "gt_animation.mp4"))
+
