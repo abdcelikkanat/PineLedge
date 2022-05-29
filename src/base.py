@@ -2,7 +2,6 @@ import random
 import numpy as np
 import torch
 from utils import *
-import time
 
 
 class BaseModel(torch.nn.Module):
@@ -96,7 +95,7 @@ class BaseModel(torch.nn.Module):
         # Compute the event indices and residual times
         events_bin_indices = torch.div(events_times_list, self._bin_width, rounding_mode='floor').type(torch.int)
         #################### TORCH HAS REMAINDER PROBLEM
-        residual_time = utils.remainder(events_times_list, self._bin_width) #residual_time = (torch.round(100*self._bins_num*events_times_list) % (100*self._bins_num*self._bin_width)) / float(100*self._bins_num) #residual_time = events_times_list % self._bin_width
+        residual_time = (torch.round(100*self._bins_num*events_times_list) % (100*self._bins_num*self._bin_width)) / float(100*self._bins_num) #residual_time = events_times_list % self._bin_width
         events_bin_indices[events_bin_indices == self._bins_num] = self._bins_num - 1
 
         # Compute the total displacements for each time-intervals and append a zero column to get rid of indexing issues
@@ -301,12 +300,12 @@ class BaseModel(torch.nn.Module):
 
         # TORCH HAS PRECISION PROBLEM IN REMAINDER OPERATIONS
         upper_bounds = interval[1:].clone() #% self._bin_width
-        upper_bounds = utils.remainder(upper_bounds, self._bin_width) #upper_bounds = (torch.round((100*self._bins_num * upper_bounds)) % 100) / float(100*self._bins_num) #upper_bounds = ((self._bins_num * upper_bounds) % (self._bins_num*self._bin_width)) / float(self._bins_num)
-        upper_bounds[utils.remainder(interval[1:], self._bin_width) <= utils.EPS] = self._bin_width #upper_bounds[torch.round((100*self._bins_num*interval[1:])) % 100 <= utils.EPS] = self._bin_width #upper_bounds[(self._bins_num*interval[1:]) % (self._bins_num*self._bin_width) <= utils.EPS] = self._bin_width = self._bin_width
+        upper_bounds = (torch.round((100*self._bins_num * upper_bounds)) % 100) / float(100*self._bins_num) #upper_bounds = ((self._bins_num * upper_bounds) % (self._bins_num*self._bin_width)) / float(self._bins_num)
+        upper_bounds[torch.round((100*self._bins_num*interval[1:])) % 100 <= utils.EPS] = self._bin_width #upper_bounds[(self._bins_num*interval[1:]) % (self._bins_num*self._bin_width) <= utils.EPS] = self._bin_width = self._bin_width
         upper_bounds[interval[1:] == 0] = 0
         lower_bounds = interval[:-1].clone()
         #lower_bounds[(self._bins_num*interval[:-1]) % (self._bins_num*self._bin_width) <= utils.EPS] = 0
-        lower_bounds[utils.remainder(interval[:-1], self._bin_width) <= utils.EPS] = 0 #lower_bounds[(torch.round(100*self._bins_num * interval[:-1])) % 100 <= utils.EPS] = 0
+        lower_bounds[(torch.round(100*self._bins_num * interval[:-1])) % 100 <= utils.EPS] = 0
         term2_u = torch.erf(upper_bounds.unsqueeze(
             1) * norm_delta_v + r)
         term2_l = torch.erf(lower_bounds.unsqueeze(
@@ -406,10 +405,8 @@ class BaseModel(torch.nn.Module):
 
     def get_negative_log_likelihood(self, nodes: torch.Tensor, event_times: torch.Tensor, event_node_pairs: torch.Tensor):
 
-        it = time.time()
         integral_term = -self.get_intensity_integral(nodes=nodes).sum()
 
-        it = time.time()
         non_integral_term = self.get_log_intensity(times_list=event_times, node_pairs=event_node_pairs).sum()
 
         return -( non_integral_term + integral_term)
@@ -451,11 +448,12 @@ class BaseModel(torch.nn.Module):
 
         return self._nodes_num
 
-    def _get_B_factor(self, bin_centers1: torch.Tensor, bin_centers2: torch.Tensor, only_kernel=False):
+    @staticmethod
+    def get_B_factor(bin_centers1: torch.Tensor, bin_centers2: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):
         time_mat = bin_centers1 - bin_centers2.transpose(1, 2)
         time_mat = time_mat.squeeze(0)
 
-        B_sigma = utils.softplus(self._prior_B_sigma)
+        B_sigma = utils.softplus(prior_B_sigma)
         kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma))
 
         # Add a constant term to get rid of computational problems
@@ -469,13 +467,15 @@ class BaseModel(torch.nn.Module):
 
         return L
 
-    def _get_C_factor(self):
+    @staticmethod
+    def get_C_factor(prior_C_Q):
         # N x K matrix
-        return torch.softmax(self._prior_C_Q, dim=1)
+        return torch.softmax(prior_C_Q, dim=1)
 
-    def _get_D_factor(self):
+    @staticmethod
+    def get_D_factor(dim):
         # D x D matrix
-        return torch.eye(self.get_dim())
+        return torch.eye(dim)
 
     def get_neg_log_prior(self, batch_nodes, batch_num=0):
 
@@ -483,14 +483,17 @@ class BaseModel(torch.nn.Module):
         bounds = self.get_bins_bounds()
 
         # Get the middle time points of the bins for TxT covariance matrix
-        middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, self._bins_num) / 2.
-
+        middle_bounds = (bounds[1:] + bounds[:-1]) / 2.
+        # Add a center point for the initial position
+        middle_bounds = torch.hstack((-middle_bounds[0], middle_bounds)).view(1, 1, self._bins_num+1)
         # B x B matrix
-        B_factor = self._get_B_factor(bin_centers1=middle_bounds, bin_centers2=middle_bounds)
+        B_factor = self.get_B_factor(
+            bin_centers1=middle_bounds, bin_centers2=middle_bounds, prior_B_sigma=self._prior_B_sigma
+        )
         # N x K matrix where K is the community size
-        C_factor = self._get_C_factor()
+        C_factor = self.get_C_factor(prior_C_Q=self._prior_C_Q)
         # D x D matrix
-        D_factor = self._get_D_factor()
+        D_factor = self.get_D_factor(dim=self.get_dim())
 
         # B(batch_size)D x BKD matrix
         K_factor_batch = torch.kron(
@@ -502,8 +505,8 @@ class BaseModel(torch.nn.Module):
         lambda_sq = self._prior_lambda ** 2
         sigma_sq = torch.sigmoid(self._prior_sigma)
         sigma_sq_inv = 1.0 / sigma_sq
-        final_dim = self.get_number_of_nodes() * self._bins_num * self._dim
-        reduced_dim = self._prior_C_Q.shape[1] * self._bins_num * self._dim
+        final_dim = self.get_number_of_nodes() * (self._bins_num+1) * self._dim
+        reduced_dim = self._prior_C_Q.shape[1] * (self._bins_num+1) * self._dim
 
         # Compute the capacitance matrix R only if batch_num == 0
         if batch_num == 0:
@@ -513,14 +516,15 @@ class BaseModel(torch.nn.Module):
             self.__R_factor_inv = torch.inverse(self.__R)
 
         # Normalize and vectorize the velocities
-        v_batch = mean_normalization(torch.index_select(self._v, dim=1, index=batch_nodes))
-        v_vect_batch = utils.vectorize(v_batch).flatten()
+        v_batch = utils.vectorize(torch.index_select(mean_normalization(self._v),  dim=1, index=batch_nodes)).flatten()
+        x0_batch = torch.index_select(mean_normalization(self._x0), dim=0, index=batch_nodes).flatten()
+        x0v = torch.hstack((x0_batch, v_batch))
 
         # Computation of the squared Mahalanobis distance: v.T @ inv(D + W @ W.T) @ v
         # It uses Woodbury matrix identity: inv(D + Kf @ Kf.T) = inv(D) - inv(D) @ Kf @ inv(R) @ Kf.T @ inv(D),
         # where R is the capacitance matrix defined by I + Kf.T @ inv(D) @ Kf
-        mahalanobis_term1 = sigma_sq_inv * v_vect_batch.pow(2).sum(-1)
-        mahalanobis_term2 = (sigma_sq_inv * v_vect_batch @ K_factor_batch @ self.__R_factor_inv.T).pow(2).sum(-1)
+        mahalanobis_term1 = sigma_sq_inv * x0v.pow(2).sum(-1)
+        mahalanobis_term2 = (sigma_sq_inv * x0v @ K_factor_batch @ self.__R_factor_inv.T).pow(2).sum(-1)
         m = (1.0 / lambda_sq) * (mahalanobis_term1 - mahalanobis_term2 )
 
         # Computation of the log determinant

@@ -6,6 +6,80 @@ import pickle as pkl
 from utils import *
 
 
+class InitialPositionVelocitySampler:
+
+    def __init__(self, dim: int, bins_num: int, cluster_sizes: list,
+                 prior_lambda: float, prior_sigma: float, prior_B_sigma: float,
+                 device: torch.device = "cpu", verbose: bool = False, seed: int = 0):
+
+        self.__dim = dim
+        self.__bins_num = bins_num
+        self.__cluster_sizes = cluster_sizes
+        self.__prior_lambda = prior_lambda
+        self.__prior_sigma = prior_sigma
+        self.__prior_B_sigma = prior_B_sigma
+        self.__time_interval_lengths = [1]*bins_num
+
+        self.__nodes_num = sum(cluster_sizes)
+        self.__K = len(cluster_sizes)
+        self.__x0 = None
+        self.__v = None
+
+        self.__device = device
+        self.__verbose = verbose
+        self.__seed = seed
+
+        self.__sample()
+
+    def __sample(self):
+
+        # Get the factor of B matrix, (bins)
+        bin_centers = torch.arange(0.5, 0.5*(self.__bins_num+1), 0.5)
+        # Add a center point for the initial position
+        bin_centers = torch.hstack((torch.as_tensor([-0.5]), bin_centers))
+        bin_centers = bin_centers.view(1, 1, self.__bins_num+1)
+
+        B_factor = BaseModel.get_B_factor(
+            bin_centers1=bin_centers, bin_centers2=bin_centers,
+            prior_B_sigma=torch.as_tensor(self.__prior_B_sigma), only_kernel=True
+        )
+
+        # Get the factor of C matrix, (nodes)
+        prior_C_Q = torch.ones(size=(self.__nodes_num, self.__K), dtype=torch.float) * (-1e6)
+        for k in range(self.__K):
+            prior_C_Q[range(sum(self.__cluster_sizes[:k]), sum(self.__cluster_sizes[:k + 1])), k] = 1e6
+        C_factor = BaseModel.get_C_factor(prior_C_Q)
+
+        # Get the factor of D matrix, (dimension)
+        D_factor = BaseModel.get_D_factor(dim=self.__dim)
+
+        # Sample the initial position and velocity vectors
+        final_dim = self.__nodes_num * (self.__bins_num+1) * self.__dim
+        cov_factor = (self.__prior_lambda) * torch.kron(torch.kron(B_factor, C_factor), D_factor)
+        cov_diag = (self.__prior_lambda ** 2) * (self.__prior_sigma ** 2) * torch.ones(final_dim)
+        lmn = torch.distributions.LowRankMultivariateNormal(
+            loc=torch.zeros(size=(final_dim,)),
+            cov_factor=cov_factor,
+            cov_diag=cov_diag
+        )
+
+        sample = lmn.sample().reshape(shape=(self.__bins_num + 1, self.__nodes_num, self.__dim))
+        self.__x0, self.__v = torch.split(sample, [1, self.__bins_num])
+        self.__x0 = self.__x0.squeeze(0)
+
+    def get_x0(self):
+
+        return self.__x0
+
+    def get_v(self):
+
+        return self.__v
+
+    def get_last_time(self):
+
+        return self.__bins_num
+
+
 class ConstructionModel(BaseModel):
 
     def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, last_time: float,

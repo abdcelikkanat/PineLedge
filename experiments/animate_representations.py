@@ -14,9 +14,9 @@ import pickle as pkl
 
 # Set some paremeters
 dim = 2
-K = 10
-bins_num = 32
-prior_lambda = 1e5
+K = 3
+bins_num = 2
+prior_lambda = 1e0
 #batch_size = 2  #1
 learning_rate = 0.1
 epochs_num = 100  # 500
@@ -26,22 +26,20 @@ verbose = True
 shuffle = True
 suffix = ""
 ###
-dataset_name = f"2_clusters_mg_B=5_noise_s=0.2_rbf-s=0.0001_lambda=0.1_sizes=8_8_beta=2.5"
+dataset_name = f"3_clusters_mg_B=100_noise_s=0.1_rbf-s=-9.210290371559083_lambda=1.0_sizes=20_20_20_beta=1.5"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}{suffix}"
 
 # Define dataset and model path
-dataset_folder = os.path.join(
-    utils.BASE_FOLDER, "datasets", "synthetic", dataset_name
-)
-model_folder = os.path.join(
-    utils.BASE_FOLDER, "experiments", "models", model_name
-)
-model_path = os.path.join(
-    model_folder, f"{model_name}.model"
-)
-anim_path = os.path.join(
-    utils.BASE_FOLDER, "experiments", "animations", f"{model_name}.mp4"
-)
+'''
+dataset_folder = os.path.join(utils.BASE_FOLDER, "datasets", "synthetic", dataset_name)
+model_folder = os.path.join(utils.BASE_FOLDER, "experiments", "models", model_name)
+model_path = os.path.join(model_folder, f"{model_name}.model")
+anim_path = os.path.join(utils.BASE_FOLDER, "experiments", "animations", f"{model_name}.mp4")
+'''
+dataset_folder = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/", dataset_name)
+model_folder = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/models", model_name)
+model_path = os.path.join(model_folder, f"{model_name}.model")
+anim_path = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/animations", f"{model_name}.mp4")
 
 # Load the dataset
 all_events = Events(seed=seed)
