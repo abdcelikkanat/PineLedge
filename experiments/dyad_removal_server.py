@@ -15,7 +15,7 @@ prior_weight_list = [1e10, 1e8, 1e6, 1e4, 1e2, 1e0] #1e8, 1e7, 1e6, 1e5, 1e4, 1e
 learning_rate = 0.01
 epochs_num = 100  # 500
 steps_per_epoch = 1
-seed = utils.str2int("testing_dyad_sequential_dec_test_____")
+seed = utils.str2int("testing_dyad_sequential_dec_test")
 verbose = True
 shuffle = True
 ####
@@ -65,7 +65,8 @@ for pwIdx, prior_lambda in enumerate(prior_weight_list):
     # Run the model
     lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,
                        prior_k=K, prior_lambda=prior_lambda,
-                       node_pairs_mask=torch.as_tensor(removed_pairs).T, last_time=1.,
+                       #node_pairs_mask=torch.as_tensor(removed_pairs).T,
+                       last_time=1.,
                        learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
                        verbose=verbose, seed=seed)
 
@@ -134,3 +135,6 @@ for pwIdx, prior_lambda in enumerate(prior_weight_list):
         y_score=[s for bin_scores in pred_scores for s in bin_scores]
     )
     print(f"PR AUC in total: {pr_auc_complete}")
+
+    intenstiy_integral_sum = 0
+    print(f"Integral sum: {sum([s for bin_scores in pred_scores for s in bin_scores])}")
