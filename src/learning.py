@@ -24,6 +24,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             last_time=last_time,
             prior_lambda=prior_lambda,
             prior_sigma=torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False),
+            prior_B_x0_c=torch.nn.Parameter(torch.ones(size=(1, 1)), requires_grad=False),
             prior_B_sigma=torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False),
             prior_C_Q=torch.nn.Parameter(torch.rand(size=(nodes_num, prior_k)), requires_grad=False),
             node_pairs_mask=node_pairs_mask,

@@ -9,7 +9,7 @@ from utils import *
 class InitialPositionVelocitySampler:
 
     def __init__(self, dim: int, bins_num: int, cluster_sizes: list,
-                 prior_lambda: float, prior_sigma: float, prior_B_sigma: float,
+                 prior_lambda: float, prior_sigma: float, prior_B_x0_c: float, prior_B_sigma: float,
                  device: torch.device = "cpu", verbose: bool = False, seed: int = 0):
 
         self.__dim = dim
@@ -18,6 +18,7 @@ class InitialPositionVelocitySampler:
         self.__prior_lambda = prior_lambda
         self.__prior_sigma = prior_sigma
         self.__prior_B_sigma = prior_B_sigma
+        self.__prior_B_x0_c = prior_B_x0_c
         self.__time_interval_lengths = [1]*bins_num
 
         self.__nodes_num = sum(cluster_sizes)
@@ -34,14 +35,13 @@ class InitialPositionVelocitySampler:
     def __sample(self):
 
         # Get the factor of B matrix, (bins)
-        bin_centers = torch.arange(0.5, 0.5*(self.__bins_num+1), 0.5)
-        # Add a center point for the initial position
-        bin_centers = torch.hstack((torch.as_tensor([-0.5]), bin_centers))
-        bin_centers = bin_centers.view(1, 1, self.__bins_num+1)
+        bin_centers = torch.arange(0.5, 0.5*(self.__bins_num+1), 0.5).view(1, self.__bins_num)
 
         B_factor = BaseModel.get_B_factor(
             bin_centers1=bin_centers, bin_centers2=bin_centers,
-            prior_B_sigma=torch.as_tensor(self.__prior_B_sigma), only_kernel=True
+            prior_B_x0_c=torch.as_tensor(self.__prior_B_x0_c).view(1, 1),
+            prior_B_sigma=torch.as_tensor(self.__prior_B_sigma),
+            only_kernel=True
         )
 
         # Get the factor of C matrix, (nodes)
@@ -64,6 +64,7 @@ class InitialPositionVelocitySampler:
         )
 
         sample = lmn.sample().reshape(shape=(self.__bins_num + 1, self.__nodes_num, self.__dim))
+
         self.__x0, self.__v = torch.split(sample, [1, self.__bins_num])
         self.__x0 = self.__x0.squeeze(0)
 

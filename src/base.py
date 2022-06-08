@@ -10,7 +10,7 @@ class BaseModel(torch.nn.Module):
     '''
     def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, bins_num: int = 10,
                  last_time: float = 1.0, prior_lambda: float = 1e5, prior_sigma: torch.Tensor = None,
-                 prior_B_sigma: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
+                 prior_B_x0_c: torch.Tensor = None, prior_B_sigma: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
                  node_pairs_mask: torch.Tensor = None, device: torch.device = "cpu",
                  verbose: bool = False, seed: int = 0):
 
@@ -41,6 +41,10 @@ class BaseModel(torch.nn.Module):
         # length-scale parameter of RBF kernel used in the construction of B
         if prior_B_sigma is not None:
             self._prior_B_sigma = torch.as_tensor(prior_B_sigma, dtype=torch.float, device=self._device)
+        if prior_B_x0_c is not None:
+            self._prior_B_x0_c_sq = torch.as_tensor(prior_B_x0_c, dtype=torch.float, device=self._device)
+            if self.__prior_B_x0_c_sq.dim == 1:
+                self.__prior_B_x0_c_sq.unsquueze(0)
         if prior_C_Q is not None:
             self._prior_C_Q = prior_C_Q  # the parameter required for the construction of the matrix C
         self.__R, self.__R_factor, self.__R_factor_inv = None, None, None  # Capacitance matrix
@@ -449,15 +453,20 @@ class BaseModel(torch.nn.Module):
         return self._nodes_num
 
     @staticmethod
-    def get_B_factor(bin_centers1: torch.Tensor, bin_centers2: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):
-        time_mat = bin_centers1 - bin_centers2.transpose(1, 2)
-        time_mat = time_mat.squeeze(0)
+    def get_B_factor(bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
+                     prior_B_x0_c: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):
 
-        B_sigma = utils.softplus(prior_B_sigma)
-        kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma))
+        time_mat = bin_centers1 - bin_centers2.T
+
+        prior_B_x0_c_sq = prior_B_x0_c ** 2
+        B_sigma_sq = prior_B_sigma ** 2
+        kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma_sq))
+
+        # Combine the entry required for x0 with the velocity vectors covariance
+        kernel = torch.block_diag(prior_B_x0_c_sq, kernel)
 
         # Add a constant term to get rid of computational problems
-        kernel = kernel + 10*utils.EPS * torch.eye(n=kernel.shape[0], m=kernel.shape[1])
+        kernel = kernel + utils.EPS * torch.eye(n=kernel.shape[0], m=kernel.shape[1])
 
         if only_kernel:
             return kernel
@@ -483,12 +492,12 @@ class BaseModel(torch.nn.Module):
         bounds = self.get_bins_bounds()
 
         # Get the middle time points of the bins for TxT covariance matrix
-        middle_bounds = (bounds[1:] + bounds[:-1]) / 2.
-        # Add a center point for the initial position
-        middle_bounds = torch.hstack((-middle_bounds[0], middle_bounds)).view(1, 1, self._bins_num+1)
+        middle_bounds = ((bounds[1:] + bounds[:-1]) / 2.).view(1, self._bins_num)
+
         # B x B matrix
         B_factor = self.get_B_factor(
-            bin_centers1=middle_bounds, bin_centers2=middle_bounds, prior_B_sigma=self._prior_B_sigma
+            bin_centers1=middle_bounds, bin_centers2=middle_bounds,
+            prior_B_x0_c=self._prior_B_x0_c, prior_B_sigma=self._prior_B_sigma
         )
         # N x K matrix where K is the community size
         C_factor = self.get_C_factor(prior_C_Q=self._prior_C_Q)

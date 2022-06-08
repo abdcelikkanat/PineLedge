@@ -12,15 +12,16 @@ import math
 ########################################################################################################################
 # Definition of the model parameters
 dim = 2
-cluster_sizes = [20]*3 #[5] * 25
+cluster_sizes = [5]*25 #[5] * 25
 nodes_num = sum(cluster_sizes)
 bins_num = 100
 
 prior_lambda = 1e0
 prior_sigma = 0.1 #1e-1
-prior_B_sigma = math.log(math.exp(1e-4) - 1) #1e-4 #1e-4
+prior_B_x0_c = 2e+0
+prior_B_sigma = 1e-4 #1e-4
 
-beta = [1.5]*nodes_num #torch.randn(size=(nodes_num, )) #[0.05]*nodes_num
+beta = [1.25]*nodes_num #torch.randn(size=(nodes_num, )) #[0.05]*nodes_num
 
 # Set the parameters
 verbose = True
@@ -29,8 +30,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 ########################################################################################################################
 # Definition of the folder and file paths
-dataset_name = f"{len(cluster_sizes)}_clusters_mg_B={bins_num}_noise_s={prior_sigma}_rbf-s={prior_B_sigma}" \
-               f"_lambda={prior_lambda}_sizes="+"_".join(map(str, cluster_sizes)) + f"_beta={beta[0]}"
+dataset_name = f"{len(cluster_sizes)}_clusters_mg_B={bins_num}_noise-sigma={prior_sigma}" \
+               f"_x0-c={prior_B_x0_c}_rbf-sigma={prior_B_sigma}_lambda={prior_lambda}_sizes="\
+               +"_".join(map(str, cluster_sizes)) + f"_beta={beta[0]}"
 
 # dataset_folder = os.path.join(utils.BASE_FOLDER, "datasets", "synthetic", dataset_name)
 dataset_folder = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/", dataset_name)
@@ -47,7 +49,7 @@ if not os.path.exists(dataset_folder):
 # Sample the initial position and velocities
 pvs = InitialPositionVelocitySampler(
     dim=dim, bins_num=bins_num, cluster_sizes=cluster_sizes,
-    prior_lambda=prior_lambda, prior_sigma=prior_sigma, prior_B_sigma=prior_B_sigma,
+    prior_lambda=prior_lambda, prior_sigma=prior_sigma, prior_B_x0_c=prior_B_x0_c, prior_B_sigma=prior_B_sigma,
     device=device, verbose=verbose, seed=seed
 )
 x0, v, last_time = pvs.get_x0(), pvs.get_v(), pvs.get_last_time()
