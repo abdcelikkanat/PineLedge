@@ -51,9 +51,32 @@ def remainder(x: torch.Tensor, y: float):
 
     # TORCH REMAINDER HAS A PROBLEM
     #return torch.remainder(x, y)
+    # return torch.remainder(torch.floor(x*(1./y)), 1)/(y)
 
-    return torch.as_tensor([math.remainder(val, y) for val in x])
 
+    # return torch.as_tensor([math.remainder(val, y) for val in x])
+    #return torch.as_tensor([math.fmod(1e6*val, 1e6*y)/1e6 for val in x])
+    # print(x, y)
+    # remainders = torch.as_tensor([math.fmod(torch.round(val, decimals=5), torch.round(torch.as_tensor([y]), decimals=5)) for val in x])
+    # remainders[remainders < 0] += y
+    # print(remainders)
+    # print("----")
+    # return remainders
+    # return torch.as_tensor([math.fmod(val, y) for val in x])
+
+    # remainders = torch.as_tensor([to.fmod(val * (1 if y > 1 else 1. / y), y if y > 1 else 1. / y) for val in x]) / (1 if y > 1 else (1. / y))
+    # remainders = torch.as_tensor([math.remainder(val, y) for val in x])
+    # remainders[remainders < 0] += y
+
+    # if y < 1:
+    #     remainders = torch.remainder(torch.floor(x*(1./y)), 1) / (y)
+    # else:
+    #     remainders = torch.remainder(x, y)
+
+    remainders = torch.remainder(x, y)
+    remainders[torch.abs(remainders - y) < EPS] = 0
+
+    return remainders
 
 # def collate_fn(batch):
 #

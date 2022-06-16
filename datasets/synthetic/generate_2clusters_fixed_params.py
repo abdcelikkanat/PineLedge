@@ -11,42 +11,42 @@ from visualization.animation import Animation
 
 time_interval_lengths = [10., 10., 10.]
 cluster_sizes = [10, 10]
-x0_c1 = np.random.multivariate_normal(mean=[-100, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
-x0_c2 = np.random.multivariate_normal(mean=[100, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
-x0 = np.vstack((x0_c1, x0_c2))
-
-x1_c1 = np.random.multivariate_normal(mean=[-10, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
-x1_c2 = np.random.multivariate_normal(mean=[100, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
-x1 = np.vstack((x1_c1, x1_c2))
-v1 = (x1 - x0) / time_interval_lengths[0]
-
-x2_c1 = np.random.multivariate_normal(mean=[-100, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
-x2_c2 = np.random.multivariate_normal(mean=[100, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
-x2 = np.vstack((x2_c1, x2_c2))
-v2 = (x2 - x1) / time_interval_lengths[1]
-
-x3_c1 = np.random.multivariate_normal(mean=[-100, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
-x3_c2 = np.random.multivariate_normal(mean=[100, 0], cov=2*np.eye(2, 2), size=(cluster_sizes[1], ))
-x3 = np.vstack((x3_c1, x3_c2))
-v3 = (x3 - x2) / time_interval_lengths[1]
-# x0_c1 = np.random.multivariate_normal(mean=[-5, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
-# x0_c2 = np.random.multivariate_normal(mean=[5, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
+# x0_c1 = np.random.multivariate_normal(mean=[-10, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
+# x0_c2 = np.random.multivariate_normal(mean=[10, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
 # x0 = np.vstack((x0_c1, x0_c2))
 #
-# x1_c1 = np.random.multivariate_normal(mean=[5, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
-# x1_c2 = np.random.multivariate_normal(mean=[-5, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
+# x1_c1 = np.random.multivariate_normal(mean=[-10, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
+# x1_c2 = np.random.multivariate_normal(mean=[10, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
 # x1 = np.vstack((x1_c1, x1_c2))
 # v1 = (x1 - x0) / time_interval_lengths[0]
 #
-# x2_c1 = np.random.multivariate_normal(mean=[-5, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
-# x2_c2 = np.random.multivariate_normal(mean=[5, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
+# x2_c1 = np.random.multivariate_normal(mean=[-10, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
+# x2_c2 = np.random.multivariate_normal(mean=[10, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
 # x2 = np.vstack((x2_c1, x2_c2))
 # v2 = (x2 - x1) / time_interval_lengths[1]
 #
-# x3_c1 = np.random.multivariate_normal(mean=[5, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
-# x3_c2 = np.random.multivariate_normal(mean=[-5, 0], cov=2*np.eye(2, 2), size=(cluster_sizes[1], ))
+# x3_c1 = np.random.multivariate_normal(mean=[-10, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
+# x3_c2 = np.random.multivariate_normal(mean=[10, 0], cov=2*np.eye(2, 2), size=(cluster_sizes[1], ))
 # x3 = np.vstack((x3_c1, x3_c2))
 # v3 = (x3 - x2) / time_interval_lengths[1]
+x0_c1 = np.random.multivariate_normal(mean=[-5, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
+x0_c2 = np.random.multivariate_normal(mean=[5, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
+x0 = np.vstack((x0_c1, x0_c2))
+
+x1_c1 = np.random.multivariate_normal(mean=[5, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
+x1_c2 = np.random.multivariate_normal(mean=[-5, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
+x1 = np.vstack((x1_c1, x1_c2))
+v1 = (x1 - x0) / time_interval_lengths[0]
+
+x2_c1 = np.random.multivariate_normal(mean=[-5, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
+x2_c2 = np.random.multivariate_normal(mean=[5, 0], cov=np.eye(2, 2), size=(cluster_sizes[1], ))
+x2 = np.vstack((x2_c1, x2_c2))
+v2 = (x2 - x1) / time_interval_lengths[1]
+
+x3_c1 = np.random.multivariate_normal(mean=[5, 0], cov=np.eye(2, 2), size=(cluster_sizes[0], ))
+x3_c2 = np.random.multivariate_normal(mean=[-5, 0], cov=2*np.eye(2, 2), size=(cluster_sizes[1], ))
+x3 = np.vstack((x3_c1, x3_c2))
+v3 = (x3 - x2) / time_interval_lengths[1]
 
 v = np.vstack((np.vstack(([v1], [v2])), [v3]))
 beta_coeff = 2
@@ -65,7 +65,7 @@ suffix = f"_beta={beta_coeff}"
 seed = 0
 
 # Define the folder and dataset paths
-dataset_name = f"_fixed_two_clusters_fp_sizes="+"_".join(map(str, cluster_sizes))+suffix
+dataset_name = f"fixed_two_clusters_fp_sizes="+"_".join(map(str, cluster_sizes))+suffix
 dataset_folder = os.path.join(
     utils.BASE_FOLDER,
     "datasets", "synthetic", dataset_name
@@ -75,7 +75,7 @@ node2group_path = os.path.join(
 )
 
 # Check if the file exists
-assert not os.path.exists(dataset_folder), "This folder path exists!"
+# assert not os.path.exists(dataset_folder), "This folder path exists!"
 
 # Create the folder of the dataset
 if not os.path.exists(dataset_folder):
@@ -102,7 +102,7 @@ embs_pred = bm.get_xt(
     events_times_list=torch.cat([frame_times]*bm.get_number_of_nodes()),
     x0=torch.repeat_interleave(bm.get_x0(), repeats=len(frame_times), dim=0),
     v=torch.repeat_interleave(bm.get_v(), repeats=len(frame_times), dim=1)
-).reshape((len(frame_times), bm.get_number_of_nodes(), bm.get_dim())).detach().numpy()
+).reshape((bm.get_number_of_nodes(), len(frame_times), bm.get_dim())).transpose(0, 1).detach().numpy() #.reshape((len(frame_times), bm.get_number_of_nodes(), bm.get_dim())).detach().numpy()
 
 # Construct the data
 events_list, events_pairs = [], []

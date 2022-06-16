@@ -2,7 +2,7 @@ import random
 import numpy as np
 import torch
 from utils import *
-
+import time
 
 class BaseModel(torch.nn.Module):
     '''
@@ -42,9 +42,9 @@ class BaseModel(torch.nn.Module):
         if prior_B_sigma is not None:
             self._prior_B_sigma = torch.as_tensor(prior_B_sigma, dtype=torch.float, device=self._device)
         if prior_B_x0_c is not None:
-            self._prior_B_x0_c_sq = torch.as_tensor(prior_B_x0_c, dtype=torch.float, device=self._device)
-            if self.__prior_B_x0_c_sq.dim == 1:
-                self.__prior_B_x0_c_sq.unsquueze(0)
+            self._prior_B_x0_c_sq = torch.as_tensor(prior_B_x0_c**2, dtype=torch.float, device=self._device)
+            if self._prior_B_x0_c_sq.dim == 1:
+                self._prior_B_x0_c_sq.unsquueze(0)
         if prior_C_Q is not None:
             self._prior_C_Q = prior_C_Q  # the parameter required for the construction of the matrix C
         self.__R, self.__R_factor, self.__R_factor_inv = None, None, None  # Capacitance matrix
@@ -89,17 +89,12 @@ class BaseModel(torch.nn.Module):
 
         if x0 is None or v is None:
             raise ValueError("x0 and v cannot be none!")
-            # x0 = torch.repeat_interleave(mean_normalization(self._x0), repeats=len(events_times_list), dim=0)
-            # v = torch.repeat_interleave(mean_normalization(self._v), repeats=len(events_times_list), dim=1)
-            # events_times_list = events_times_list.repeat(self._nodes_num)
 
         assert len(events_times_list) == x0.shape[0] and x0.shape[0] == v.shape[1], print( len(events_times_list), x0.shape, v.shape)
 
-        # events_times_list[events_times_list == self._last_time] = self._last_time - utils.EPS
         # Compute the event indices and residual times
         events_bin_indices = torch.div(events_times_list, self._bin_width, rounding_mode='floor').type(torch.int)
-        #################### TORCH HAS REMAINDER PROBLEM
-        residual_time = (torch.round(100*self._bins_num*events_times_list) % (100*self._bins_num*self._bin_width)) / float(100*self._bins_num) #residual_time = events_times_list % self._bin_width
+        residual_time = utils.remainder(events_times_list, self._bin_width)
         events_bin_indices[events_bin_indices == self._bins_num] = self._bins_num - 1
 
         # Compute the total displacements for each time-intervals and append a zero column to get rid of indexing issues
@@ -161,6 +156,38 @@ class BaseModel(torch.nn.Module):
 
         return intensities
 
+    def get_log_intensity_sum(self, node_pairs: torch.Tensor, events_count: torch.Tensor,
+                              alpha1: torch.Tensor, alpha2: torch.Tensor):
+
+        bin_bounds = self.get_bins_bounds()
+
+        x_tilde = mean_normalization(self._x0)
+        v_tilde = mean_normalization(self._v)
+
+        delta_x = torch.index_select(x_tilde, dim=0, index=node_pairs[0]) - \
+                  torch.index_select(x_tilde, dim=0, index=node_pairs[1])
+        delta_v = torch.index_select(v_tilde, dim=1, index=node_pairs[0]) - \
+                  torch.index_select(v_tilde, dim=1, index=node_pairs[1])
+
+        # delta_xt is a tensor of size (bins_num x node_pairs) x dim
+        delta_xt = self.get_xt(
+            events_times_list=torch.repeat_interleave(bin_bounds[:-1], node_pairs.shape[1], dim=0),
+            x0=delta_x.repeat(self._bins_num, 1),
+            v=delta_v.repeat(1, self._bins_num, 1)
+        ).reshape(self._bins_num, node_pairs.shape[1], self._dim)
+
+        delta_xt_sq_norm = torch.norm(delta_xt, p=2, dim=2, keepdim=False) ** 2
+        delta_vt_sq_norm = torch.norm(delta_v, p=2, dim=2, keepdim=False) ** 2
+        delta_xtvt = torch.sum(delta_xt * delta_v, dim=2, keepdim=False)
+
+        beta_ij = torch.index_select(self._beta, 0, node_pairs[0]) + torch.index_select(self._beta, 0, node_pairs[1])
+        intensities = torch.sum(beta_ij * events_count.sum(dim=1, keepdim=False))
+        intensities += -torch.sum(delta_xt_sq_norm * events_count.T)
+        intensities += -2*torch.sum(delta_xtvt * alpha1.T)
+        intensities += -torch.sum(delta_vt_sq_norm * alpha2.T)
+
+        return intensities
+
     def get_intensity_integral(self, nodes: torch.tensor, x0: torch.Tensor = None, v: torch.Tensor = None,
                                beta: torch.Tensor = None, bin_bounds: torch.Tensor = None,
                                distance: str = "squared_euc", sum=True):
@@ -195,10 +222,6 @@ class BaseModel(torch.nn.Module):
         beta_ij = torch.index_select(beta, dim=0, index=unique_node_pairs[0]) + \
                   torch.index_select(beta, dim=0, index=unique_node_pairs[1])
 
-        # if len(node_pairs.shape) == 1:
-        #     delta_x0 = delta_x0.view(1, self._dim)
-        #     delta_v = delta_v.view(self.get_num_of_bins(), 1, self._dim)
-
         if distance != "squared_euc":
             raise ValueError("Invalid distance metric!")
 
@@ -220,10 +243,10 @@ class BaseModel(torch.nn.Module):
         # term1 = torch.exp( beta_ij.unsqueeze(0) + r**2 - norm_delta_xt**2 )
         term1 = torch.exp(beta_ij.unsqueeze(0) + (r ** 2) - (norm_delta_xt ** 2))
 
-        upper_bounds = bin_bounds[1:] - self._bin_width * torch.arange(len(bin_bounds)-1) #* (bin_bounds[0] / self._bin_width)
-        lower_bounds = bin_bounds[:-1] - self._bin_width * torch.arange(len(bin_bounds)-1) #* (bin_bounds[0] / self._bin_width)
-        term2_u = torch.erf(upper_bounds.unsqueeze(1) * norm_delta_v + r)  # term2_u = torch.erf(bin_bounds[1:].expand(norm_delta_v.shape[1], len(bin_bounds)-1).t()*norm_delta_v + r)
-        term2_l = torch.erf(lower_bounds.unsqueeze(1) * norm_delta_v + r)  # term2_l = torch.erf(bin_bounds[:-1].expand(norm_delta_v.shape[1], len(bin_bounds)-1).t()*norm_delta_v + r)
+        upper_bounds = bin_bounds[1:] - self._bin_width * torch.arange(len(bin_bounds)-1)
+        lower_bounds = bin_bounds[:-1] - self._bin_width * torch.arange(len(bin_bounds)-1)
+        term2_u = torch.erf(upper_bounds.unsqueeze(1) * norm_delta_v + r)
+        term2_l = torch.erf(lower_bounds.unsqueeze(1) * norm_delta_v + r)
 
         if not sum:
             return term0 * term1 * (term2_u - term2_l)
@@ -275,20 +298,14 @@ class BaseModel(torch.nn.Module):
         beta_ij = torch.index_select(beta, dim=0, index=unique_node_pairs[0]) + \
                   torch.index_select(beta, dim=0, index=unique_node_pairs[1])
 
-
         if distance != "squared_euc":
             raise ValueError("Invalid distance metric!")
 
-        # delta_xt = self.get_xt(
-        #     events_times_list=torch.cat([interval[:-1]] * delta_x0.shape[0]),
-        #     x0=torch.repeat_interleave(delta_x0, repeats=len(interval)-1, dim=0),
-        #     v=torch.repeat_interleave(delta_v, repeats=len(interval)-1, dim=1),
-        # ).reshape((delta_x0.shape[0], len(interval)-1,  self._dim)).transpose(0, 1)
         delta_xt = self.get_xt(
             events_times_list=torch.as_tensor(interval[:-1]),
             x0=torch.repeat_interleave(delta_x0, repeats=len(interval)-1, dim=0),
             v=torch.repeat_interleave(delta_v, repeats=len(interval)-1, dim=1),
-        ).unsqueeze(1) #.reshape((delta_x0.shape[0], len(interval) - 1, self._dim)).transpose(0, 1)
+        ).unsqueeze(1)
 
         delta_v = torch.index_select(delta_v, index=interval_idx[:-1], dim=0)
 
@@ -302,49 +319,18 @@ class BaseModel(torch.nn.Module):
         term0 = 0.5 * torch.sqrt(torch.as_tensor(utils.PI, device=self._device)).to(self._device) * inv_norm_delta_v
         term1 = torch.exp(beta_ij.unsqueeze(0) + (r ** 2) - (norm_delta_xt ** 2))
 
-        # TORCH HAS PRECISION PROBLEM IN REMAINDER OPERATIONS
-        upper_bounds = interval[1:].clone() #% self._bin_width
-        upper_bounds = (torch.round((100*self._bins_num * upper_bounds)) % 100) / float(100*self._bins_num) #upper_bounds = ((self._bins_num * upper_bounds) % (self._bins_num*self._bin_width)) / float(self._bins_num)
-        upper_bounds[torch.round((100*self._bins_num*interval[1:])) % 100 <= utils.EPS] = self._bin_width #upper_bounds[(self._bins_num*interval[1:]) % (self._bins_num*self._bin_width) <= utils.EPS] = self._bin_width = self._bin_width
+        upper_bounds = interval[1:].clone()
+        upper_bounds = utils.remainder(upper_bounds, self._bin_width)
+        upper_bounds[utils.remainder(interval[1:], self._bin_width) <= utils.EPS] = self._bin_width
         upper_bounds[interval[1:] == 0] = 0
         lower_bounds = interval[:-1].clone()
-        #lower_bounds[(self._bins_num*interval[:-1]) % (self._bins_num*self._bin_width) <= utils.EPS] = 0
-        lower_bounds[(torch.round(100*self._bins_num * interval[:-1])) % 100 <= utils.EPS] = 0
+        lower_bounds[utils.remainder(interval[:-1], self._bin_width) <= utils.EPS] = 0
         term2_u = torch.erf(upper_bounds.unsqueeze(
             1) * norm_delta_v + r)
         term2_l = torch.erf(lower_bounds.unsqueeze(
             1) * norm_delta_v + r)
 
-        return (term0 * term1 * (term2_u - term2_l)).sum()  # .sum(dim=0)
-
-
-    # def get_intensity_integral_for(self, i: int, j: int, interval: torch.Tensor = None,
-    #                            distance: str = "squared_euc"):
-    #
-    #     # Expand the interval with bin bounds
-    #     temp_interval, interval_idx = torch.arange(self._bins_num), torch.arange(self._bins_num)
-    #     mask = interval[0] <= temp_interval
-    #     temp_interval = temp_interval[mask]
-    #     interval_idx = interval_idx[mask]
-    #     mask = interval[1] >= temp_interval
-    #     temp_interval = temp_interval[mask]
-    #     interval_idx = interval_idx[mask]
-    #     print(":", interval, temp_interval)
-    #     if interval[0] != temp_interval[0]:
-    #         temp_interval = torch.cat((torch.as_tensor([interval[0]]), temp_interval))
-    #         interval_idx = torch.cat((torch.as_tensor([interval_idx[0]]), interval_idx))
-    #     if interval[1] != temp_interval[-1]:
-    #         temp_interval = torch.cat((temp_interval, torch.as_tensor([interval[1]])))
-    #         interval_idx = torch.cat((interval_idx, torch.as_tensor([interval_idx[0]])))
-    #     interval = temp_interval
-    #
-    #     print("x: ", interval)
-    #     total_sum = 0
-    #     for b in range(len(interval)-1):
-    #         f = self.get_intensity_integral(nodes=torch.as_tensor([[i], [j]]), bin_bounds=interval[b:b+2])
-    #         print("f:", f)
-    #         total_sum += f
-    #     return total_sum
+        return (term0 * term1 * (term2_u - term2_l)).sum()
 
     def get_survival_function(self, times_list: torch.Tensor, x0: torch.Tensor = None, v: torch.Tensor = None,
                               beta: torch.Tensor = None, bin_bounds: torch.Tensor = None,
@@ -407,13 +393,15 @@ class BaseModel(torch.nn.Module):
 
             raise ValueError("Invalid distance metric!")
 
-    def get_negative_log_likelihood(self, nodes: torch.Tensor, event_times: torch.Tensor, event_node_pairs: torch.Tensor):
+    def get_negative_log_likelihood(self, nodes: torch.Tensor, unique_node_pairs: torch.Tensor,
+                                    events_count: torch.Tensor, alpha1: torch.Tensor, alpha2: torch.Tensor):
 
+        non_integral_term = self.get_log_intensity_sum(
+            node_pairs=unique_node_pairs, events_count=events_count, alpha1=alpha1, alpha2=alpha2
+        )
         integral_term = -self.get_intensity_integral(nodes=nodes).sum()
 
-        non_integral_term = self.get_log_intensity(times_list=event_times, node_pairs=event_node_pairs).sum()
-
-        return -( non_integral_term + integral_term)
+        return -(non_integral_term + integral_term)
 
     def get_survival_log_likelihood(self, time_seq_list: list, node_pairs: torch.tensor):
 
@@ -454,11 +442,12 @@ class BaseModel(torch.nn.Module):
 
     @staticmethod
     def get_B_factor(bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
-                     prior_B_x0_c: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):
+                     prior_B_x0_c_sq: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):
+
+        prior_B_sigma = torch.clamp(prior_B_sigma, min=-1.5, max=1.5)
 
         time_mat = bin_centers1 - bin_centers2.T
 
-        prior_B_x0_c_sq = prior_B_x0_c ** 2
         B_sigma_sq = prior_B_sigma ** 2
         kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma_sq))
 
@@ -472,7 +461,8 @@ class BaseModel(torch.nn.Module):
             return kernel
 
         # B x B lower triangular matrix
-        L = torch.linalg.cholesky(kernel)
+        # L = torch.linalg.cholesky(kernel)
+        L, _ = torch.linalg.cholesky_ex(kernel)
 
         return L
 
@@ -497,7 +487,7 @@ class BaseModel(torch.nn.Module):
         # B x B matrix
         B_factor = self.get_B_factor(
             bin_centers1=middle_bounds, bin_centers2=middle_bounds,
-            prior_B_x0_c=self._prior_B_x0_c, prior_B_sigma=self._prior_B_sigma
+            prior_B_x0_c_sq=self._prior_B_x0_c_sq, prior_B_sigma=self._prior_B_sigma
         )
         # N x K matrix where K is the community size
         C_factor = self.get_C_factor(prior_C_Q=self._prior_C_Q)
@@ -512,7 +502,7 @@ class BaseModel(torch.nn.Module):
 
         # Some common parameters
         lambda_sq = self._prior_lambda ** 2
-        sigma_sq = torch.sigmoid(self._prior_sigma)
+        sigma_sq = torch.clamp(self._prior_sigma ** 2, min=1e-3)
         sigma_sq_inv = 1.0 / sigma_sq
         final_dim = self.get_number_of_nodes() * (self._bins_num+1) * self._dim
         reduced_dim = self._prior_C_Q.shape[1] * (self._bins_num+1) * self._dim

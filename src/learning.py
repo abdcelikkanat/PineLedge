@@ -5,16 +5,16 @@ from src.base import BaseModel
 from torch.utils.tensorboard import SummaryWriter
 from torch_sparse import spspmm
 import time
+import utils
 
 
 class LearningModel(BaseModel, torch.nn.Module):
 
-    def __init__(self, data, nodes_num, bins_num, dim, last_time: float,
+    def __init__(self, data, nodes_num, bins_num, dim, last_time: float, approach="nhpp",
                  prior_k: int = 4, prior_lambda: float = 1.0,
                  node_pairs_mask: torch.Tensor = None,
                  learning_rate: float = 0.1, batch_size: int = None, epochs_num: int = 100,
-                 steps_per_epoch=10, device: torch.device = None, verbose: bool = False, seed: int = 0,
-                 approach: str = "nhpp"):
+                 steps_per_epoch=10, device: torch.device = None, verbose: bool = False, seed: int = 0):
 
         super(LearningModel, self).__init__(
             x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim), device=device) - 1, requires_grad=False),
@@ -23,26 +23,18 @@ class LearningModel(BaseModel, torch.nn.Module):
             bins_num=bins_num,
             last_time=last_time,
             prior_lambda=prior_lambda,
-            prior_sigma=torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False),
-            prior_B_x0_c=torch.nn.Parameter(torch.ones(size=(1, 1)), requires_grad=False),
-            prior_B_sigma=torch.nn.Parameter(2 * torch.rand(size=(1,)) - 1, requires_grad=False),
-            prior_C_Q=torch.nn.Parameter(torch.rand(size=(nodes_num, prior_k)), requires_grad=False),
+            prior_sigma=torch.nn.Parameter(2 * torch.rand(size=(1,), device=device) - 1, requires_grad=False),
+            prior_B_x0_c=torch.nn.Parameter(torch.ones(size=(1, 1), device=device), requires_grad=False),
+            prior_B_sigma=torch.nn.Parameter(2 * torch.rand(size=(1,), device=device) - 1, requires_grad=False),
+            prior_C_Q=torch.nn.Parameter(torch.rand(size=(nodes_num, prior_k), device=device), requires_grad=False),
             node_pairs_mask=node_pairs_mask,
             device=device,
             verbose=verbose,
             seed=seed
         )
 
-        # Latent community dimension required for the construction of matrix C
-        # self.__K = k
-        # self.initialize_prior_params()
-
         self.__data = data
-
         self.__approach = approach
-
-        # Set the correction function
-        self.__correction_func = None
 
         self.__learning_procedure = "seq"
         self.__learning_rate = learning_rate
@@ -64,11 +56,42 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__batch_size = self.get_number_of_nodes() if batch_size is None else batch_size
         self.__events_pairs = torch.as_tensor(self.__data[0], dtype=torch.int, device=self.__device)
         self.__events = self.__data[1]
-        self.__all_lengths = torch.as_tensor(list(map(len, self.__events)), dtype=torch.int, device=self.__device)
-        self.__all_events = torch.as_tensor([e for events in self.__events for e in events], dtype=torch.float, device=self.__device)
-        self.__all_pairs = torch.repeat_interleave(self.__events_pairs, self.__all_lengths, dim=0)
+        # self.__all_lengths = torch.as_tensor(list(map(len, self.__events)), dtype=torch.int, device=self.__device)
+        # self.__all_events = torch.as_tensor([e for events in self.__events for e in events], dtype=torch.float, device=self.__device)
+        # self.__all_pairs = torch.repeat_interleave(self.__events_pairs, self.__all_lengths, dim=0)
         self.__sampling_weights = torch.ones(self.get_number_of_nodes())
-        self.__sparse_row = (self.__all_pairs[:, 0] * self.get_number_of_nodes())+ self.__all_pairs[:, 1]
+        # self.__sparse_row = (self.__all_pairs[:, 0] * self.get_number_of_nodes())+ self.__all_pairs[:, 1]
+
+        if verbose:
+            print("+ Pre-computation process has started...")
+            init_time = time.time()
+        self.__pair_events = [[[] for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
+        self.__events_count = torch.as_tensor(
+            [[0 for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
+        )
+        self.__alpha1 = torch.as_tensor(
+            [[0 for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
+        )
+        self.__alpha2 = torch.as_tensor(
+            [[0 for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
+        )
+        for pair, events in zip(self.__events_pairs, self.__events):
+            flatIdx = utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=self.get_number_of_nodes())
+            batch_idx = torch.div(torch.as_tensor(events), self._bin_width, rounding_mode="floor").type(torch.int)
+            batch_idx[batch_idx == self._bins_num] = self._bins_num - 1
+            for e, b in zip(events, batch_idx):
+                self.__pair_events[flatIdx][b].append(e)
+
+            for b in range(self._bins_num):
+                self.__events_count[flatIdx][b] = len(self.__pair_events[flatIdx][b])
+                self.__alpha1[flatIdx][b] = torch.sum(utils.remainder(
+                    x=torch.as_tensor(self.__pair_events[flatIdx][b]), y=self._bin_width
+                ))
+                self.__alpha2[flatIdx][b] = torch.sum(utils.remainder(
+                    x=torch.as_tensor(self.__pair_events[flatIdx][b]), y=self._bin_width
+                ) ** 2)
+        if verbose:
+            print(f"\t Done! {time.time()-init_time}")
 
     def learn(self, learning_type=None):
 
@@ -208,41 +231,29 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.train()
 
         sampled_nodes = torch.multinomial(self.__sampling_weights, self.__batch_size, replacement=False)
-        sample_unique_pairs_coord_indices = (
-                (sampled_nodes * self.get_number_of_nodes()).unsqueeze(1) + sampled_nodes
-        ).reshape(-1).expand(2, self.__batch_size*self.__batch_size)
-
-        const_value = 1
-        indexC, valueC = spspmm(
-            indexA=sample_unique_pairs_coord_indices.long(),
-            valueA=torch.ones(sample_unique_pairs_coord_indices.shape[1]),
-            indexB=torch.cat(
-                (self.__sparse_row.unsqueeze(0), torch.arange(self.__all_events.shape[0]).unsqueeze(0)), dim=0
-            ).long(),
-            valueB=(self.__all_events + const_value),
-            m=self.get_number_of_nodes() ** 2,
-            k=self.get_number_of_nodes() ** 2,
-            n=self.__all_events.shape[0],
-            coalesced=True
-        )
-        valueC = valueC - const_value
-
-        sample_i = torch.div(indexC[0], self.get_number_of_nodes(), rounding_mode='floor').unsqueeze(1)
-        sample_j = (indexC[0] % self.get_number_of_nodes()).unsqueeze(1)
-        batch_node_pairs = torch.hstack((sample_i, sample_j)).t()
+        sampled_nodes, _ = torch.sort(sampled_nodes, dim=0)
+        batch_pairs = torch.combinations(sampled_nodes, r=2).T
+        indices = (self._nodes_num-1) * batch_pairs[0] - \
+                  torch.div(batch_pairs[0]*(batch_pairs[0]+1), 2, rounding_mode="trunc").type(torch.int) + \
+                  (batch_pairs[1]-1)
 
         # Forward pass
         average_batch_loss = self.forward(
-            nodes=sampled_nodes, event_times=valueC, event_node_pairs=batch_node_pairs, batch_num=batch_num
+            nodes=sampled_nodes, unique_node_pairs=batch_pairs,
+            events_count=torch.index_select(self.__events_count, index=indices, dim=0),
+            alpha1=torch.index_select(self.__alpha1, index=indices, dim=0),
+            alpha2=torch.index_select(self.__alpha2, index=indices, dim=0),
+            batch_num=batch_num
         )
 
         return average_batch_loss
 
-    def forward(self, nodes: torch.Tensor, event_times: torch.Tensor, event_node_pairs: torch.Tensor, batch_num: int):
+    def forward(self, nodes: torch.Tensor, unique_node_pairs: torch.Tensor,
+                events_count: torch.Tensor, alpha1: torch.Tensor, alpha2: torch.Tensor, batch_num: int):
 
         nll = 0
         if self.__approach == "nhpp":
-            nll = nll + self.get_negative_log_likelihood(nodes, event_times, event_node_pairs)
+            nll = nll + self.get_negative_log_likelihood(nodes, unique_node_pairs, events_count, alpha1, alpha2)
 
         elif self.__approach == "survival":
             pass #nll += self.get_survival_log_likelihood(nodes, event_times, event_node_pairs)
@@ -251,11 +262,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             raise ValueError("Invalid approach name!")
 
         # Add prior
-        if self.__learning_procedure == "alt":
-            nll = nll + self.get_neg_log_prior(batch_nodes=nodes, batch_num=batch_num)
-
-        if self.__learning_procedure == "seq":
-            nll = nll + self.get_neg_log_prior(batch_nodes=nodes, batch_num=batch_num)
+        nll = nll + self.get_neg_log_prior(batch_nodes=nodes, batch_num=batch_num)
 
         return nll
 

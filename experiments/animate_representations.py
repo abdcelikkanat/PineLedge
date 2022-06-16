@@ -14,19 +14,19 @@ import pickle as pkl
 
 # Set some paremeters
 dim = 2
-K = 3
-bins_num = 2
-prior_lambda = 1e0
+K = 4
+bins_num = 100
+prior_lambda = 1e5
 #batch_size = 2  #1
 learning_rate = 0.1
 epochs_num = 100  # 500
 steps_per_epoch = 1
-seed = utils.str2int("full2")
+seed = utils.str2int("4nodes")
 verbose = True
 shuffle = True
 suffix = ""
 ###
-dataset_name = f"3_clusters_mg_B=100_noise_s=0.1_rbf-s=-9.210290371559083_lambda=1.0_sizes=20_20_20_beta=1.5"
+dataset_name = f"four_nodes_fp_beta=1.5" #f"three_clusters_fp_sizes=15_20_10_beta=1" #f"fixed_two_clusters_fp_sizes=10_10_beta=2" #f"four_nodes_fp" #f"fixed_two_clusters_fp_sizes=10_10_beta=2" #f"three_clusters_fp_sizes=15_20_10_beta=1" #f"four_nodes_fp" #f"three_clusters_fp_sizes=15_20_10_beta=1"  #f"four_nodes_fp" #f"3_clusters_mg_B=100_noise_s=0.1_rbf-s=-9.210290371559083_lambda=1.0_sizes=20_20_20_beta=1.5"
 model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}{suffix}"
 
 # Define dataset and model path
