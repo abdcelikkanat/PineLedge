@@ -8,7 +8,7 @@ from src.events import Events
 # global control for device
 CUDA = True
 # availability for different devices
-avail_device="cuda:0" if torch.cuda.is_available() else "cpu"
+avail_device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 # choosing device and setting default tensor, meaning that each new tensor has a default device pointing to
 if (CUDA) and (avail_device == "cuda:0"):
@@ -73,7 +73,7 @@ data = all_events.get_pairs(), all_events.get_events()
 lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,  last_time=1., batch_size=batch_size,
                    prior_k=K, prior_lambda=prior_lambda,
                    learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
-                   verbose=verbose, seed=seed)
+                   verbose=verbose, seed=seed, device=torch.device(avail_device))
 
 
 # assert not os.path.exists(model_path), "The file exists!"

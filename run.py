@@ -90,7 +90,7 @@ def process(args):
     lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1., batch_size=batch_size,
                        prior_k=K, prior_lambda=prior_lambda,
                        learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
-                       verbose=verbose, seed=seed)
+                       verbose=verbose, seed=seed, device=torch.device(avail_device))
 
     lm.learn()
     torch.save(lm.state_dict(), model_path)
