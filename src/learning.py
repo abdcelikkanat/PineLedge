@@ -2,7 +2,6 @@ import sys
 import math
 import torch
 from src.base import BaseModel
-from torch.utils.tensorboard import SummaryWriter
 from torch_sparse import spspmm
 import time
 import utils
@@ -51,7 +50,6 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         self.__verbose = verbose
         self.__device = device
-        self.__writer = SummaryWriter("../experiments/logs/loss")
 
         # Order matters for sequential learning
         self.__learning_param_names = [["x0", "v", ], ["reg_params"], ["beta"]]
@@ -67,6 +65,8 @@ class LearningModel(BaseModel, torch.nn.Module):
         # self.__all_pairs = torch.repeat_interleave(self.__events_pairs, self.__all_lengths, dim=0)
         self.__sampling_weights = torch.ones(self.get_number_of_nodes())
         # self.__sparse_row = (self.__all_pairs[:, 0] * self.get_number_of_nodes())+ self.__all_pairs[:, 1]
+
+        self.__loss = []
 
         if verbose:
             print("+ Pre-computation process has started...")
@@ -99,7 +99,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         if verbose:
             print(f"\t Done! {time.time()-init_time}")
 
-    def learn(self, learning_type=None):
+    def learn(self, learning_type=None, loss_file_path=None):
 
         learning_type = self.__learning_procedure if learning_type is None else learning_type
 
@@ -126,6 +126,11 @@ class LearningModel(BaseModel, torch.nn.Module):
             # Run alternating minimization
             self.__sequential_learning()
 
+            if loss_file_path is not None:
+                with open(loss_file_path, 'w') as f:
+                    for batch_losses in self.__loss:
+                        f.write(f"{' '.join('{:.3f}'.format(loss) for loss in batch_losses)}\n")
+
         elif learning_type == "alt":
 
             # For each parameter group, add an optimizer
@@ -148,9 +153,6 @@ class LearningModel(BaseModel, torch.nn.Module):
         else:
 
             raise NotImplementedError("A learning method other than alternation minimization is not implemented!")
-
-        if self.__writer is not None:
-            self.__writer.close()
 
     def __sequential_learning(self):
 
@@ -207,8 +209,11 @@ class LearningModel(BaseModel, torch.nn.Module):
         init_time = time.time()
 
         average_batch_loss = 0
+        self.__loss.append([])
         for batch_num in range(self.__steps_per_epoch):
-            average_batch_loss += self.__train_one_batch(batch_num)
+            batch_loss = self.__train_one_batch(batch_num)
+            self.__loss[-1].append(batch_loss)
+            average_batch_loss += batch_loss
 
         # Get the average epoch loss
         epoch_loss = average_batch_loss / float(self.__steps_per_epoch)
@@ -228,9 +233,6 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         # Perform a step
         optimizer.step()
-
-        # if self.__writer is not None:
-        #     self.__writer.add_scalar(tag="Loss/train", scalar_value=average_epoch_loss, global_step=epoch)
 
     def __train_one_batch(self, batch_num):
 

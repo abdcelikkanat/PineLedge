@@ -26,7 +26,9 @@ def parse_arguments():
     parser.add_argument(
         '--output', type=str, required=True, help='Path of the model'
     )
-
+    parser.add_argument(
+        '--log', type=str, required=True, help='Path of the log file'
+    )
     parser.add_argument(
         '--bins_num', type=int, default=100, required=False, help='Number of bins'
     )
@@ -62,6 +64,7 @@ def process(args):
 
     dataset_path = args.input
     model_path = args.output
+    log_file_path = args.log
 
     bins_num = args.bins_num
     dim = args.dim
@@ -92,7 +95,7 @@ def process(args):
                        learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
                        verbose=verbose, seed=seed, device=torch.device(avail_device))
 
-    lm.learn()
+    lm.learn(loss_file_path=log_file_path)
     torch.save(lm.state_dict(), model_path)
 
 

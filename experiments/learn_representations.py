@@ -32,10 +32,10 @@ shuffle = True
 
 ###
 # dataset_name = f"25_clusters_mg_B=100_noise-sigma=0.1_x0-c=2.0_rbf-sigma=0.0001_lambda=1.0_sizes=5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_beta=1.25"
-# dataset_name = f"four_nodes_fp_beta=1.5"
+dataset_name = f"four_nodes_fp_beta=1.5"
 # dataset_name = f"fixed_two_clusters_fp_sizes=10_10_beta=2"
 # dataset_name = f"25_clusters_mg_B=100_noise-sigma=0.1_x0-c=2.0_rbf-sigma=0.0001_lambda=1.0_sizes=5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_beta=1.25"
-dataset_name = f"three_clusters_fp_sizes=15_20_10_beta=1"
+# dataset_name = f"three_clusters_fp_sizes=15_20_10_beta=1"
 # dataset_name = f"four_nodes_fp_beta=1.5"
 # dataset_name = f"fixed_two_clusters_fp_sizes=10_10_beta=2"
 # dataset_name = f"three_clusters_fp_sizes=15_20_10_beta=1"
@@ -55,7 +55,7 @@ model_path = os.path.join(model_folder, f"{model_name}.model")
 dataset_path = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/", dataset_name)
 model_folder = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/models", model_name)
 model_path = os.path.join(model_folder, f"{model_name}.model")
-
+log_path = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/logs", f"{model_name}.txt")
 
 # Load the dataset
 all_events = Events(seed=seed)
@@ -79,7 +79,7 @@ lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,  
 # assert not os.path.exists(model_path), "The file exists!"
 
 # Save the model
-# os.makedirs(model_folder)
+os.makedirs(model_folder)
 
-lm.learn()
+lm.learn(loss_file_path=log_path)
 torch.save(lm.state_dict(), model_path)
