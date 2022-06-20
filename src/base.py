@@ -446,8 +446,7 @@ class BaseModel(torch.nn.Module):
                      prior_B_x0_c_sq: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):
 
         time_mat = bin_centers1 - bin_centers2.T
-
-        prior_B_sigma = torch.clamp(prior_B_sigma, min=-1./len(bin_centers1), max=1./len(bin_centers1))
+        prior_B_sigma = torch.clamp(prior_B_sigma, min=-1./bin_centers1.shape[1], max=1./bin_centers1.shape[1])
         B_sigma_sq = prior_B_sigma ** 2
         kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma_sq))
 
