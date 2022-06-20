@@ -4,6 +4,7 @@ import torch
 from utils import *
 import time
 
+
 class BaseModel(torch.nn.Module):
     '''
     Description
@@ -444,10 +445,9 @@ class BaseModel(torch.nn.Module):
     def get_B_factor(bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
                      prior_B_x0_c_sq: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):
 
-        prior_B_sigma = torch.clamp(prior_B_sigma, min=-1.5, max=1.5)
-
         time_mat = bin_centers1 - bin_centers2.T
 
+        prior_B_sigma = torch.clamp(prior_B_sigma, min=-1./len(bin_centers1), max=1./len(bin_centers1))
         B_sigma_sq = prior_B_sigma ** 2
         kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma_sq))
 
@@ -461,8 +461,8 @@ class BaseModel(torch.nn.Module):
             return kernel
 
         # B x B lower triangular matrix
-        # L = torch.linalg.cholesky(kernel)
-        L, _ = torch.linalg.cholesky_ex(kernel)
+        L = torch.linalg.cholesky(kernel)  # L, _ = torch.linalg.cholesky_ex(kernel)
+
 
         return L
 
@@ -502,7 +502,7 @@ class BaseModel(torch.nn.Module):
 
         # Some common parameters
         lambda_sq = self._prior_lambda ** 2
-        sigma_sq = torch.clamp(self._prior_sigma ** 2, min=1e-3)
+        sigma_sq = torch.clamp(self._prior_sigma ** 2, min=1./(self._bins_num**2))
         sigma_sq_inv = 1.0 / sigma_sq
         final_dim = self.get_number_of_nodes() * (self._bins_num+1) * self._dim
         reduced_dim = self._prior_C_Q.shape[1] * (self._bins_num+1) * self._dim

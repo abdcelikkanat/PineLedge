@@ -16,6 +16,8 @@ class LearningModel(BaseModel, torch.nn.Module):
                  learning_rate: float = 0.1, batch_size: int = None, epochs_num: int = 100,
                  steps_per_epoch=10, device: torch.device = None, verbose: bool = False, seed: int = 0):
 
+        assert bins_num > 2, print("Number of bins must be greater than 2!")
+
         super(LearningModel, self).__init__(
             x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim), device=device) - 1, requires_grad=False),
             v=torch.nn.Parameter(2 * torch.rand(size=(bins_num, nodes_num, dim), device=device) - 1, requires_grad=False),
@@ -23,9 +25,13 @@ class LearningModel(BaseModel, torch.nn.Module):
             bins_num=bins_num,
             last_time=last_time,
             prior_lambda=prior_lambda,
-            prior_sigma=torch.nn.Parameter(2 * torch.rand(size=(1,), device=device) - 1, requires_grad=False),
+            prior_sigma=torch.nn.Parameter(
+                (2.0 / bins_num) * torch.rand(size=(1,), device=device) + (1./bins_num), requires_grad=False
+            ),
             prior_B_x0_c=torch.nn.Parameter(torch.ones(size=(1, 1), device=device), requires_grad=False),
-            prior_B_sigma=torch.nn.Parameter(2 * torch.rand(size=(1,), device=device) - 1, requires_grad=False),
+            prior_B_sigma=torch.nn.Parameter(
+                (1 - (2.0 / bins_num)) * torch.rand(size=(1,), device=device) + (1./bins_num), requires_grad=False
+            ),
             prior_C_Q=torch.nn.Parameter(torch.rand(size=(nodes_num, prior_k), device=device), requires_grad=False),
             node_pairs_mask=node_pairs_mask,
             device=device,

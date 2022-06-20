@@ -21,10 +21,10 @@ else:
 dim = 2
 K = 3
 bins_num = 100
-prior_lambda = 1e5 #1e5
+prior_lambda = 1e2 #1e5
 #batch_size = 2  #1
 learning_rate = 0.1
-epochs_num = 300  # 500
+epochs_num = 500  # 500
 steps_per_epoch = 1
 seed = utils.str2int("25clusters")
 verbose = True
@@ -32,10 +32,10 @@ shuffle = True
 
 ###
 # dataset_name = f"25_clusters_mg_B=100_noise-sigma=0.1_x0-c=2.0_rbf-sigma=0.0001_lambda=1.0_sizes=5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_beta=1.25"
-dataset_name = f"four_nodes_fp_beta=1.5"
+# dataset_name = f"four_nodes_fp_beta=1.5"
 # dataset_name = f"fixed_two_clusters_fp_sizes=10_10_beta=2"
 # dataset_name = f"25_clusters_mg_B=100_noise-sigma=0.1_x0-c=2.0_rbf-sigma=0.0001_lambda=1.0_sizes=5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_5_beta=1.25"
-# dataset_name = f"three_clusters_fp_sizes=15_20_10_beta=1"
+dataset_name = f"three_clusters_fp_sizes=15_20_10_beta=1"
 # dataset_name = f"four_nodes_fp_beta=1.5"
 # dataset_name = f"fixed_two_clusters_fp_sizes=10_10_beta=2"
 # dataset_name = f"three_clusters_fp_sizes=15_20_10_beta=1"
@@ -79,7 +79,7 @@ lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim,  
 # assert not os.path.exists(model_path), "The file exists!"
 
 # Save the model
-os.makedirs(model_folder)
+# os.makedirs(model_folder)
 
 lm.learn()
 torch.save(lm.state_dict(), model_path)
