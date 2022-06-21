@@ -283,14 +283,14 @@ class LearningModel(BaseModel, torch.nn.Module):
 
             total_batch_loss += batch_loss
 
-            # Set the gradients to 0
-            optimizer.zero_grad()
+        # Set the gradients to 0
+        optimizer.zero_grad()
 
-            # Backward pass
-            batch_loss.backward()
+        # Backward pass
+        total_batch_loss.backward()
 
-            # Perform a step
-            optimizer.step()
+        # Perform a step
+        optimizer.step()
 
         # Get the average epoch loss
         epoch_loss = total_batch_loss / float(self.__steps_per_epoch)
