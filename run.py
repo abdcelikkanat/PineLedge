@@ -48,6 +48,9 @@ def parse_arguments():
         '--spe', type=int, default=1, required=False, help='Number of steps per epoch'
     )
     parser.add_argument(
+        '--batch_size', type=int, default=0, required=False, help='Batch size'
+    )
+    parser.add_argument(
         '--lr', type=float, default=0.1, required=False, help='Learning rate'
     )
     parser.add_argument(
@@ -72,6 +75,7 @@ def process(args):
     prior_lambda = args.prior_lambda
     epochs_num = args.epochs_num
     steps_per_epoch = args.spe
+    batch_size = args.batch_size
     learning_rate = args.lr
 
     seed = args.seed
@@ -80,7 +84,8 @@ def process(args):
     # Load the dataset
     all_events = Events(seed=seed)
     all_events.read(dataset_path)
-    batch_size = all_events.number_of_nodes()
+    if batch_size <= 0:
+        batch_size = all_events.number_of_nodes()
 
     # Normalize the events
     all_events.normalize(init_time=0, last_time=1.0)
@@ -94,7 +99,7 @@ def process(args):
                        prior_k=K, prior_lambda=prior_lambda,
                        learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
                        verbose=verbose, seed=seed, device=torch.device(avail_device))
-    print("WHY!")
+
     lm.learn(loss_file_path=log_file_path)
     torch.save(lm.state_dict(), model_path)
 

@@ -508,8 +508,9 @@ class BaseModel(torch.nn.Module):
 
         # Compute the capacitance matrix R only if batch_num == 0
         if batch_num == 0:
-            K_factor_full = torch.kron(B_factor.contiguous(), torch.kron(C_factor.contiguous(), D_factor).contiguous())
-            self.__R = torch.eye(reduced_dim) + sigma_sq_inv * K_factor_full.T @ K_factor_full
+            #K_factor_full = torch.kron(B_factor.contiguous(), torch.kron(C_factor.contiguous(), D_factor).contiguous())
+            #self.__R = torch.eye(reduced_dim) + sigma_sq_inv * K_factor_full.T @ K_factor_full
+            self.__R = torch.eye(reduced_dim) + sigma_sq_inv * torch.kron(B_factor.T @ B_factor, torch.kron(C_factor.T @ C_factor, D_factor.T @ D_factor))
             self.__R_factor = torch.linalg.cholesky(self.__R)
             self.__R_factor_inv = torch.inverse(self.__R)
 

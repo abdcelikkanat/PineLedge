@@ -273,15 +273,27 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         init_time = time.time()
 
-        average_batch_loss = 0
+        total_batch_loss = 0
         self.__loss.append([])
         for batch_num in range(self.__steps_per_epoch):
+
             batch_loss = self.__train_one_batch(batch_num)
+
             self.__loss[-1].append(batch_loss)
-            average_batch_loss += batch_loss
+
+            total_batch_loss += batch_loss
+
+            # Set the gradients to 0
+            optimizer.zero_grad()
+
+            # Backward pass
+            batch_loss.backward()
+
+            # Perform a step
+            optimizer.step()
 
         # Get the average epoch loss
-        epoch_loss = average_batch_loss / float(self.__steps_per_epoch)
+        epoch_loss = total_batch_loss / float(self.__steps_per_epoch)
 
         if not math.isfinite(epoch_loss):
             print(f"Epoch loss is {epoch_loss}, stopping training")
@@ -289,15 +301,6 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         if self.__verbose and (epoch_num % 10 == 0 or epoch_num == self.__epochs_num - 1):
             print(f"| Epoch = {epoch_num} | Loss/train: {epoch_loss} | Epoch Elapsed time: {time.time() - init_time}")
-
-        # Set the gradients to 0
-        optimizer.zero_grad()
-
-        # Backward pass
-        epoch_loss.backward()
-
-        # Perform a step
-        optimizer.step()
 
     def __train_one_batch(self, batch_num):
 
@@ -310,12 +313,27 @@ class LearningModel(BaseModel, torch.nn.Module):
         #           torch.div(batch_pairs[0]*(batch_pairs[0]+1), 2, rounding_mode="trunc").type(torch.int) + \
         #           (batch_pairs[1]-1)
 
+        # print(sampled_nodes)
+        # print(batch_pairs)
+        # z = [self.__events_count.get(pair, [0]*self._bins_num) for pair in
+        #          batch_pairs.T]
+        # print( z )
+        # print( torch.as_tensor(z).shape )
         # Forward pass
         average_batch_loss = self.forward(
             nodes=sampled_nodes, unique_node_pairs=batch_pairs,
-            events_count=torch.as_tensor([self.__events_count.get(pair, 0) for pair in batch_pairs], dtype=torch.int),
-            alpha1=torch.as_tensor([self.__alpha1.get(pair, 0) for pair in batch_pairs], dtype=torch.float),
-            alpha2=torch.as_tensor([self.__alpha2.get(pair, 0) for pair in batch_pairs], dtype=torch.float),
+            events_count=torch.as_tensor(
+                [self.__events_count.get(pair, [0]*self._bins_num) for pair in batch_pairs.T],
+                dtype=torch.int
+            ),
+            alpha1=torch.as_tensor(
+                [self.__alpha1.get(pair, [0]*self._bins_num) for pair in batch_pairs.T],
+                dtype=torch.float
+            ),
+            alpha2=torch.as_tensor(
+                [self.__alpha2.get(pair, [0]*self._bins_num) for pair in batch_pairs.T],
+                dtype=torch.float
+            ),
             batch_num=batch_num
         )
         # average_batch_loss = self.forward(
