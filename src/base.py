@@ -501,7 +501,7 @@ class BaseModel(torch.nn.Module):
 
         # Some common parameters
         lambda_sq = self._prior_lambda ** 2
-        sigma_sq = torch.clamp(self._prior_sigma ** 2, min=1./(self._bins_num**2))
+        sigma_sq = torch.clamp(self._prior_sigma, min=1./(self._bins_num)) ** 2
         sigma_sq_inv = 1.0 / sigma_sq
         final_dim = self.get_number_of_nodes() * (self._bins_num+1) * self._dim
         reduced_dim = self._prior_C_Q.shape[1] * (self._bins_num+1) * self._dim

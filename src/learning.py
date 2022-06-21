@@ -72,6 +72,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             print("+ Pre-computation process has started...")
             init_time = time.time()
         self.__pair_events = [[[] for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
+        print(sys.getsizeof(self.__pair_events), len(self.__pair_events))
         self.__events_count = torch.as_tensor(
             [[0 for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
         )
