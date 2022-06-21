@@ -58,7 +58,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__add_prior = False  # Do not change
 
         self.__batch_size = self.get_number_of_nodes() if batch_size is None else batch_size
-        self.__events_pairs = torch.as_tensor(self.__data[0], dtype=torch.int, device=self.__device)
+        self.__events_pairs = self.__data[0]
         self.__events = self.__data[1]
         # self.__all_lengths = torch.as_tensor(list(map(len, self.__events)), dtype=torch.int, device=self.__device)
         # self.__all_events = torch.as_tensor([e for events in self.__events for e in events], dtype=torch.float, device=self.__device)
@@ -107,24 +107,24 @@ class LearningModel(BaseModel, torch.nn.Module):
             print("+ Pre-computation process has started...")
             init_time = time.time()
 
-        self.__pair_events = dict(zip(self.__events_pairs, self.__events))
-
+        self.__pair_events = dict(zip([utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=self._nodes_num) for pair in self.__events_pairs], self.__events))
         self.__events_count, self.__alpha1, self.__alpha2 = dict(), dict(), dict()
-        for pair in self.__pair_events.keys():
-            self.__events_count[pair] = torch.zeros(size=(self._bins_num, ), dtype=torch.int)
-            self.__alpha1[pair] = torch.zeros(size=(self._bins_num, ), dtype=torch.float)
-            self.__alpha2[pair] = torch.zeros(size=(self._bins_num, ), dtype=torch.float)
+        for pairIdx in self.__pair_events.keys():
+            self.__events_count[pairIdx] = torch.zeros(size=(self._bins_num, ), dtype=torch.int)
+            self.__alpha1[pairIdx] = torch.zeros(size=(self._bins_num, ), dtype=torch.float)
+            self.__alpha2[pairIdx] = torch.zeros(size=(self._bins_num, ), dtype=torch.float)
 
             bin_idx = torch.div(
-                torch.as_tensor(self.__pair_events[pair]), self._bin_width, rounding_mode="floor"
+                torch.as_tensor(self.__pair_events[pairIdx]), self._bin_width, rounding_mode="floor"
             ).type(torch.long)
+            bin_idx[bin_idx == self._bins_num] = self._bins_num - 1
 
-            self.__events_count[pair][bin_idx] += 1
-            self.__alpha1[pair][bin_idx] = torch.sum(
-                utils.remainder(torch.as_tensor(self.__pair_events[pair], dtype=torch.float), self._bin_width)
+            self.__events_count[pairIdx][bin_idx] += 1
+            self.__alpha1[pairIdx][bin_idx] = torch.sum(
+                utils.remainder(torch.as_tensor(self.__pair_events[pairIdx], dtype=torch.float), self._bin_width)
             )
-            self.__alpha2[pair][bin_idx] = torch.sum(
-                utils.remainder(torch.as_tensor(self.__pair_events[pair], dtype=torch.float), self._bin_width)**2
+            self.__alpha2[pairIdx][bin_idx] = torch.sum(
+                utils.remainder(torch.as_tensor(self.__pair_events[pairIdx], dtype=torch.float), self._bin_width)**2
             )
 
         if verbose:
@@ -308,30 +308,39 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         sampled_nodes = torch.multinomial(self.__sampling_weights, self.__batch_size, replacement=False)
         sampled_nodes, _ = torch.sort(sampled_nodes, dim=0)
-        batch_pairs = torch.combinations(sampled_nodes, r=2).T
+        batch_pairs = torch.combinations(sampled_nodes, r=2).T.type(torch.int)
+
         # indices = (self._nodes_num-1) * batch_pairs[0] - \
         #           torch.div(batch_pairs[0]*(batch_pairs[0]+1), 2, rounding_mode="trunc").type(torch.int) + \
         #           (batch_pairs[1]-1)
 
         # print(sampled_nodes)
         # print(batch_pairs)
-        # z = [self.__events_count.get(pair, [0]*self._bins_num) for pair in
-        #          batch_pairs.T]
-        # print( z )
-        # print( torch.as_tensor(z).shape )
+        # z = [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.int)) for pair in batch_pairs.T.tolist()]
+        # # print( z )
+        # z = torch.tensor(z)
+        # print( z.sum(dim=1) )
+        # print(
+        #     (
+        #         [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), 's') for pair in batch_pairs.T.tolist()],
+        #     )
+        # )
+        # print(utils.pairIdx2flatIdx(batch_pairs.T[0][0], batch_pairs.T[0][1],self._nodes_num) )
+        # print(list(self.__events_count.keys())[0])
+        # # print( torch.as_tensor(z).shape )
         # Forward pass
         average_batch_loss = self.forward(
             nodes=sampled_nodes, unique_node_pairs=batch_pairs,
             events_count=torch.as_tensor(
-                [self.__events_count.get(pair, [0]*self._bins_num) for pair in batch_pairs.T],
+                [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.int)).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.int
             ),
             alpha1=torch.as_tensor(
-                [self.__alpha1.get(pair, [0]*self._bins_num) for pair in batch_pairs.T],
+                [self.__alpha1.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.float)).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.float
             ),
             alpha2=torch.as_tensor(
-                [self.__alpha2.get(pair, [0]*self._bins_num) for pair in batch_pairs.T],
+                [self.__alpha2.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.float)).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.float
             ),
             batch_num=batch_num
