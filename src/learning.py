@@ -118,13 +118,17 @@ class LearningModel(BaseModel, torch.nn.Module):
                 torch.as_tensor(self.__pair_events[pairIdx]), self._bin_width, rounding_mode="floor"
             ).type(torch.long)
             bin_idx[bin_idx == self._bins_num] = self._bins_num - 1
-
-            self.__events_count[pairIdx][bin_idx] += 1
-            self.__alpha1[pairIdx][bin_idx] = torch.sum(
-                utils.remainder(torch.as_tensor(self.__pair_events[pairIdx], dtype=torch.float), self._bin_width)
+            self.__events_count[pairIdx].index_add_(
+                dim=0, index=bin_idx,
+                source=torch.ones(len(bin_idx), dtype=torch.int)
             )
-            self.__alpha2[pairIdx][bin_idx] = torch.sum(
-                utils.remainder(torch.as_tensor(self.__pair_events[pairIdx], dtype=torch.float), self._bin_width)**2
+            self.__alpha1[pairIdx].index_add_(
+                dim=0, index=bin_idx,
+                source=utils.remainder(torch.as_tensor(self.__pair_events[pairIdx], dtype=torch.float), self._bin_width)
+            )
+            self.__alpha2[pairIdx].index_add_(
+                dim=0, index=bin_idx,
+                source=utils.remainder(torch.as_tensor(self.__pair_events[pairIdx], dtype=torch.float), self._bin_width)**2
             )
 
         if verbose:
@@ -283,14 +287,14 @@ class LearningModel(BaseModel, torch.nn.Module):
 
             total_batch_loss += batch_loss
 
-        # Set the gradients to 0
-        optimizer.zero_grad()
+            # Set the gradients to 0
+            optimizer.zero_grad()
 
-        # Backward pass
-        total_batch_loss.backward()
+            # Backward pass
+            batch_loss.backward()
 
-        # Perform a step
-        optimizer.step()
+            # Perform a step
+            optimizer.step()
 
         # Get the average epoch loss
         epoch_loss = total_batch_loss / float(self.__steps_per_epoch)
@@ -328,6 +332,18 @@ class LearningModel(BaseModel, torch.nn.Module):
         # print(utils.pairIdx2flatIdx(batch_pairs.T[0][0], batch_pairs.T[0][1],self._nodes_num) )
         # print(list(self.__events_count.keys())[0])
         # # print( torch.as_tensor(z).shape )
+
+        # print(
+        #     torch.as_tensor(
+        #         [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num),
+        #                                  torch.zeros(size=(self._bins_num,), dtype=torch.int)).tolist() for pair in
+        #          batch_pairs.T.tolist()],
+        #         dtype=torch.int
+        #     )
+        # )
+        # print(self.__events[0])
+        # print(self.get_bins_bounds())
+
         # Forward pass
         average_batch_loss = self.forward(
             nodes=sampled_nodes, unique_node_pairs=batch_pairs,
