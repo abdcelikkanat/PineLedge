@@ -234,9 +234,9 @@ class BaseModel(torch.nn.Module):
 
         norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
         # norm_v: a matrix of bins_counts x len(node_pairs)
-        norm_delta_v = torch.norm(delta_v, p=2, dim=2, keepdim=False)
+        norm_delta_v = torch.norm(delta_v, p=2, dim=2, keepdim=False) + utils.EPS
 
-        inv_norm_delta_v = 1.0 / (norm_delta_v + utils.EPS)
+        inv_norm_delta_v = 1.0 / (norm_delta_v)
         delta_xt_v = (delta_xt * delta_v).sum(dim=2, keepdim=False)
         r = delta_xt_v * inv_norm_delta_v
 
@@ -312,8 +312,8 @@ class BaseModel(torch.nn.Module):
 
         norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
         # norm_v: a matrix of bins_counts x len(node_pairs)
-        norm_delta_v = torch.norm(delta_v, p=2, dim=2, keepdim=False)
-        inv_norm_delta_v = 1.0 / (norm_delta_v + utils.EPS)
+        norm_delta_v = torch.norm(delta_v, p=2, dim=2, keepdim=False) + utils.EPS
+        inv_norm_delta_v = 1.0 / (norm_delta_v)
         delta_xt_v = (delta_xt * delta_v).sum(dim=2, keepdim=False)
         r = delta_xt_v * inv_norm_delta_v
 
@@ -372,8 +372,8 @@ class BaseModel(torch.nn.Module):
 
             norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
             # norm_v: a matrix of bins_counts x len(node_pairs)
-            norm_delta_v = torch.norm(delta_v.index_select(0, time_indices), p=2, dim=2, keepdim=False)
-            inv_norm_delta_v = 1.0 / (norm_delta_v + utils.EPS)
+            norm_delta_v = torch.norm(delta_v.index_select(0, time_indices), p=2, dim=2, keepdim=False) + utils.EPS
+            inv_norm_delta_v = 1.0 / (norm_delta_v)
             # print(delta_xt.shape, delta_v[time_indices, :, :].shape)
             delta_xt_v = (delta_xt * delta_v.index_select(0, time_indices)).sum(dim=2, keepdim=False)
             r = delta_xt_v * inv_norm_delta_v
