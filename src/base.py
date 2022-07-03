@@ -94,7 +94,7 @@ class BaseModel(torch.nn.Module):
         assert len(events_times_list) == x0.shape[0] and x0.shape[0] == v.shape[1], print( len(events_times_list), x0.shape, v.shape)
 
         # Compute the event indices and residual times
-        events_bin_indices = torch.div(events_times_list, self._bin_width, rounding_mode='floor').type(torch.int)
+        events_bin_indices = torch.div(events_times_list, self._bin_width, rounding_mode='trunc').type(torch.int)
         residual_time = utils.remainder(events_times_list, self._bin_width)
         events_bin_indices[events_bin_indices == self._bins_num] = self._bins_num - 1
 
@@ -283,7 +283,7 @@ class BaseModel(torch.nn.Module):
         else:
             temp_interval = interval
         interval = temp_interval
-        interval_idx = torch.div(interval, self._bin_width, rounding_mode="floor").type(torch.int)
+        interval_idx = torch.div(interval, self._bin_width, rounding_mode="trunc").type(torch.int)
 
         x0 = mean_normalization(self._x0)
         v = mean_normalization(self._v)

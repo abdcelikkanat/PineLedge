@@ -36,15 +36,25 @@ class BaseTest(unittest.TestCase):
             beta=beta, bins_num=bins_num, last_time=last_time
         )
 
-    # def test_xt(self):
-    #
-    #     events_times_list = torch.as_tensor([1., 6.])
-    #     x0 = torch.as_tensor([[0, 1], [0, -1]])
-    #     v = torch.as_tensor([[[0, 1], [0, -1]], [[0, 1], [0, -1]]])
-    #     pred_xt = self._bm.get_xt(events_times_list=events_times_list, x0=x0, v=v)
-    #
-    #     true_xt = torch.as_tensor([[0., 2], [0, -7]])
-    #     self.assertEqualTensor(true_xt, pred_xt)
+    def test_xt(self):
+
+        events_times_list = torch.as_tensor([1., 6.])
+        x0 = torch.as_tensor([[0, 1], [0, -1]])
+        v = torch.as_tensor([[[0, 1], [0, -1]], [[0, 1], [0, -1]]])
+        pred_xt = self._bm.get_xt(events_times_list=events_times_list, x0=x0, v=v)
+
+        true_xt = torch.as_tensor([[0., 2], [0, -7]])
+        self.assertEqualTensor(true_xt, pred_xt)
+
+    def test_xt(self):
+
+        events_times_list = torch.as_tensor([1., 6., 8.])
+        x0 = torch.as_tensor([[0, 1], [0, -1], [3, -5]])
+        v = torch.as_tensor([[[0, 1], [0, -1], [2, 1]], [[0, 1], [0, -1], [6, -4]]])
+        pred_xt = self._bm.get_xt(events_times_list=events_times_list, x0=x0, v=v)
+        print(pred_xt)
+        true_xt = torch.as_tensor([[0., 2], [0, -7], [31, -12]])
+        self.assertEqualTensor(true_xt, pred_xt)
 
     def test_log_intensity_sum(self):
 

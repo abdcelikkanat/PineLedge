@@ -86,6 +86,32 @@ class AlgebraicEquivalence(unittest.TestCase):
 
         self.assertEqualTensor(exact.data, riemann_integral_sum_lower_bound.data[0])
 
+    def test_integral_whole2(self):
+
+        dim = 2
+        nodes_num = 2
+        bins_num = 100
+        K = 4
+        tl = 0.
+        tu = 1.
+
+        x0 = torch.randn(size=(nodes_num, dim))
+        v = 0 * torch.randn(size=(bins_num, nodes_num, dim))
+        beta = 1 * torch.randn(size=(nodes_num,))
+
+        x0 = utils.mean_normalization(x0)
+        v = utils.mean_normalization(v)
+
+        bm = BaseModel(x0=x0, v=v, beta=beta, bins_num=bins_num, last_time=tu)
+
+        exact = bm.get_intensity_integral(
+            nodes=torch.as_tensor([0, 1]),
+        )
+
+        expected = torch.as_tensor([ torch.exp( beta[0] + beta[1] - torch.sum((x0[0, :] - x0[1, :])**2) ) ])
+        print(exact.data, expected.data)
+        self.assertEqualTensor(exact.data, expected.data)
+
 
 if __name__ == '__main__':
     unittest.main()
