@@ -78,6 +78,11 @@ def remainder(x: torch.Tensor, y: float):
 
     return remainders
 
+
+def div(x: torch.Tensor, y: float, decimals=5):
+
+    return torch.round(torch.div(torch.round(x, decimals=decimals), y, )).type(torch.int)
+
 # def collate_fn(batch):
 #
 #     node_pairs = []

@@ -94,7 +94,7 @@ class BaseModel(torch.nn.Module):
         assert len(events_times_list) == x0.shape[0] and x0.shape[0] == v.shape[1], print( len(events_times_list), x0.shape, v.shape)
 
         # Compute the event indices and residual times
-        events_bin_indices = torch.div(events_times_list, self._bin_width, rounding_mode='trunc').type(torch.int)
+        events_bin_indices = utils.div(events_times_list, self._bin_width) #torch.div(events_times_list, self._bin_width, rounding_mode='trunc').type(torch.int)
         residual_time = utils.remainder(events_times_list, self._bin_width)
         events_bin_indices[events_bin_indices == self._bins_num] = self._bins_num - 1
 
@@ -269,7 +269,7 @@ class BaseModel(torch.nn.Module):
             return riemann_integral_sum_lower_bound
 
         # Expand the interval with bin bounds
-        temp_interval = torch.arange(self._bins_num+1)*self._bin_width
+        temp_interval = torch.arange(self._bins_num+1, dtype=torch.float)*self._bin_width
         mask = interval[0] <= temp_interval
         temp_interval = temp_interval[mask]
         mask = interval[1] >= temp_interval
@@ -277,14 +277,15 @@ class BaseModel(torch.nn.Module):
 
         if len(temp_interval):
             if interval[0] != temp_interval[0]:
-                temp_interval = torch.cat((torch.as_tensor([interval[0]]), temp_interval))
+                temp_interval = torch.cat((torch.as_tensor([interval[0]], dtype=torch.float), temp_interval))
             if interval[1] != temp_interval[-1]:
-                temp_interval = torch.cat((temp_interval, torch.as_tensor([interval[1]])))
+                temp_interval = torch.cat((temp_interval, torch.as_tensor([interval[1]], dtype=torch.float)))
         else:
             temp_interval = interval
         interval = temp_interval
-        interval_idx = torch.div(interval, self._bin_width, rounding_mode="trunc").type(torch.int)
-
+        interval_idx = utils.div(interval, self._bin_width)
+        # print(interval)
+        # print(interval_idx)
         x0 = mean_normalization(self._x0)
         v = mean_normalization(self._v)
         beta = self._beta
@@ -307,6 +308,7 @@ class BaseModel(torch.nn.Module):
             x0=torch.repeat_interleave(delta_x0, repeats=len(interval)-1, dim=0),
             v=torch.repeat_interleave(delta_v, repeats=len(interval)-1, dim=1),
         ).unsqueeze(1)
+        # print(delta_xt.shape, delta_x0.shape, delta_v.shape, len(interval)-1)
 
         delta_v = torch.index_select(delta_v, index=interval_idx[:-1], dim=0)
 
@@ -317,15 +319,27 @@ class BaseModel(torch.nn.Module):
         delta_xt_v = (delta_xt * delta_v).sum(dim=2, keepdim=False)
         r = delta_xt_v * inv_norm_delta_v
 
-        term0 = 0.5 * torch.sqrt(torch.as_tensor(utils.PI, device=self._device)).to(self._device) * inv_norm_delta_v
+        term0 = 0.5 * torch.sqrt(torch.as_tensor(utils.PI, device=self._device)) * inv_norm_delta_v
         term1 = torch.exp(beta_ij.unsqueeze(0) + (r ** 2) - (norm_delta_xt ** 2))
 
         upper_bounds = interval[1:].clone()
-        upper_bounds = utils.remainder(upper_bounds, self._bin_width)
-        upper_bounds[utils.remainder(interval[1:], self._bin_width) <= utils.EPS] = self._bin_width
-        upper_bounds[interval[1:] == 0] = 0
+        # upper_bounds = utils.remainder(upper_bounds, self._bin_width)
+        # upper_bounds[utils.remainder(interval[1:], self._bin_width) <= utils.EPS] = self._bin_width
+        # upper_bounds[interval[1:] == 0] = 0
         lower_bounds = interval[:-1].clone()
-        lower_bounds[utils.remainder(interval[:-1], self._bin_width) <= utils.EPS] = 0
+        # lower_bounds[utils.remainder(interval[:-1], self._bin_width) <= utils.EPS] = 0
+
+        upper_width_idx = utils.remainder(upper_bounds, self._bin_width) < utils.EPS
+        upper_bounds = utils.remainder(upper_bounds, self._bin_width)
+        upper_bounds[upper_width_idx] = self._bin_width
+
+        lower_bounds = utils.remainder(upper_bounds, self._bin_width)
+
+        # print("Upper bound: ", upper_bounds)
+        # print("lower bound: ", lower_bounds)
+        # print("interval: ", interval, utils.div(interval, self._bin_width))
+        # print("norm v: ", norm_delta_v)
+        # print("r: ", r)
         term2_u = torch.erf(upper_bounds.unsqueeze(
             1) * norm_delta_v + r)
         term2_l = torch.erf(lower_bounds.unsqueeze(

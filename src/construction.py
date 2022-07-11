@@ -39,7 +39,7 @@ class InitialPositionVelocitySampler:
 
         B_factor = BaseModel.get_B_factor(
             bin_centers1=bin_centers, bin_centers2=bin_centers,
-            prior_B_x0_c=torch.as_tensor(self.__prior_B_x0_c).view(1, 1),
+            prior_B_x0_c_sq=torch.as_tensor(self.__prior_B_x0_c**2).view(1, 1),
             prior_B_sigma=torch.as_tensor(self.__prior_B_sigma),
             only_kernel=True
         )

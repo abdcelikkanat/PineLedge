@@ -61,8 +61,8 @@ class AlgebraicEquivalence(unittest.TestCase):
         dim = 2
         nodes_num = 2
         bins_num = 100
-        tl = 0.22
-        tu = 0.98
+        tl = 0.61
+        tu = 0.62
 
         x0 = torch.randn(size=(nodes_num, dim))
         v = torch.randn(size=(bins_num, nodes_num, dim))
@@ -74,7 +74,7 @@ class AlgebraicEquivalence(unittest.TestCase):
 
         bm = BaseModel(x0=x0, v=v, beta=beta, bins_num=bins_num, last_time=1.0)
 
-        exact = bm.get_intensity_integral_for(i=0, j=1, interval=torch.as_tensor([tl, tu]))
+        exact = bm.get_intensity_integral_for(i=0, j=1, interval=torch.as_tensor([tl, tu], dtype=torch.float))
 
         sample_time_list = torch.linspace(tl, tu, steps=10000)
         delta_t = sample_time_list[1] - sample_time_list[0]
@@ -83,8 +83,18 @@ class AlgebraicEquivalence(unittest.TestCase):
             riemann_integral_sum_lower_bound += bm.get_intensity(times_list=torch.as_tensor([sample_t]),
                                                                  node_pairs=torch.as_tensor([[0, 1]]).T)
         riemann_integral_sum_lower_bound = riemann_integral_sum_lower_bound * delta_t
-
+        # print("comp: ", exact.data, riemann_integral_sum_lower_bound.data[0])
+        # print("bura:", bm.get_intensity_integral(nodes=torch.as_tensor([0, 1])))
         self.assertEqualTensor(exact.data, riemann_integral_sum_lower_bound.data[0])
+
+        # tl = 0.0
+        # tu = 0.13
+        # exact1 = bm.get_intensity_integral_for(i=0, j=1, interval=torch.as_tensor([tl, tu]))
+        #
+        # tl = 0.0
+        # tu = 0.67
+        # exact2 = bm.get_intensity_integral_for(i=0, j=1, interval=torch.as_tensor([tl, tu]))
+        # print("diff: ", exact2-exact1)
 
     def test_integral_whole2(self):
 
@@ -109,7 +119,6 @@ class AlgebraicEquivalence(unittest.TestCase):
         )
 
         expected = torch.as_tensor([ torch.exp( beta[0] + beta[1] - torch.sum((x0[0, :] - x0[1, :])**2) ) ])
-        print(exact.data, expected.data)
         self.assertEqualTensor(exact.data, expected.data)
 
 

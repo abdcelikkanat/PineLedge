@@ -52,7 +52,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__device = device
 
         # Order matters for sequential learning
-        self.__learning_param_names = [["x0", "v", ], ["reg_params"], ["beta"]]
+        self.__learning_param_names = [["x0", "beta", ], ["v"], ["reg_params"]] #[["x0", "v", ], ["reg_params"], ["beta"]]
         self.__learning_param_epoch_weights = [1, 1, 1]
 
         self.__add_prior = False  # Do not change
