@@ -17,8 +17,8 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         super(LearningModel, self).__init__(
             x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim), device=device) - 1, requires_grad=False),
-            v=torch.nn.Parameter(2 * torch.rand(size=(bins_num, nodes_num, dim), device=device) - 1, requires_grad=False),
-            beta=torch.nn.Parameter(0 * torch.rand(size=(nodes_num, ), device=device), requires_grad=False),
+            v=torch.nn.Parameter(torch.zeros(size=(bins_num, nodes_num, dim), device=device), requires_grad=False),
+            beta=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, ), device=device) - 1, requires_grad=False),
             bins_num=bins_num,
             last_time=last_time,
             prior_lambda=prior_lambda,
@@ -56,7 +56,6 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__loss = []
 
         # Pre-computation of some coefficients
-
         self.__events_count, self.__alpha1, self.__alpha2 = self.__compute_coefficients(
             self._nodes_num, self.__events_pairs, self.__events, self._bins_num
         )

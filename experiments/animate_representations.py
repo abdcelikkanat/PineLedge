@@ -14,23 +14,23 @@ import pickle as pkl
 
 # Set some paremeters
 dim = 2
-K = 4
+K = 10
 bins_num = 100
 prior_lambda = 1e5
 #batch_size = 2  #1
 learning_rate = 0.1
-epochs_num = 100  # 500
+epoch_num = 100  # 500
 steps_per_epoch = 1
-seed = utils.str2int("4nodes")
+seed = utils.str2int("sil")
 verbose = True
 shuffle = True
 suffix = ""
 ###
 dataset_name = f"four_nodes_fp_beta=1.5" #f"three_clusters_fp_sizes=15_20_10_beta=1" #f"fixed_two_clusters_fp_sizes=10_10_beta=2" #f"four_nodes_fp" #f"fixed_two_clusters_fp_sizes=10_10_beta=2" #f"three_clusters_fp_sizes=15_20_10_beta=1" #f"four_nodes_fp" #f"three_clusters_fp_sizes=15_20_10_beta=1"  #f"four_nodes_fp" #f"3_clusters_mg_B=100_noise_s=0.1_rbf-s=-9.210290371559083_lambda=1.0_sizes=20_20_20_beta=1.5"
-model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epochs_num}_spe={steps_per_epoch}_s={seed}{suffix}"
+model_name = f"{dataset_name}_D={dim}_B={bins_num}_K={K}_pl={prior_lambda}_lr={learning_rate}_e={epoch_num}_spe={steps_per_epoch}_s={seed}{suffix}"
 
 # Define dataset and model path
-'''
+
 dataset_folder = os.path.join(utils.BASE_FOLDER, "datasets", "synthetic", dataset_name)
 model_folder = os.path.join(utils.BASE_FOLDER, "experiments", "models", model_name)
 model_path = os.path.join(model_folder, f"{model_name}.model")
@@ -40,7 +40,7 @@ dataset_folder = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pive
 model_folder = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/models", model_name)
 model_path = os.path.join(model_folder, f"{model_name}.model")
 anim_path = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/animations", f"{model_name}.mp4")
-
+'''
 # Load the dataset
 all_events = Events(seed=seed)
 all_events.read(dataset_folder)
@@ -57,7 +57,7 @@ data = all_events.get_pairs(), all_events.get_events()
 # Run the model
 lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1., batch_size=batch_size,
                    prior_k=K, prior_lambda=prior_lambda,
-                   learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
+                   learning_rate=learning_rate, epoch_num=epoch_num, steps_per_epoch=steps_per_epoch,
                    verbose=verbose, seed=seed)
 
 # Load the model
