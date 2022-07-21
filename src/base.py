@@ -398,7 +398,7 @@ class BaseModel(torch.nn.Module):
             term2_u = torch.erf(all_bounds[1:].expand(norm_delta_v.shape[1], len(all_bounds)-1).t()*norm_delta_v + r)
             term2_l = torch.erf(all_bounds[:-1].expand(norm_delta_v.shape[1], len(all_bounds)-1).t()*norm_delta_v + r)
 
-            # There might be more efficient implementation!
+            #
             diff = term2_u - term2_l
             diff = diff[all_indices[:-1]]
 

@@ -25,7 +25,7 @@ beta = [1.25]*nodes_num #torch.randn(size=(nodes_num, )) #[0.05]*nodes_num
 
 # Set the parameters
 verbose = True
-seed = 0
+seed = 9
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 ########################################################################################################################

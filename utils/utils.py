@@ -14,9 +14,6 @@ INF = 1e+6
 PI = math.pi
 LOG2PI = math.log(2*PI)
 
-softplus = torch.nn.Softplus()
-
-
 def str2int(text):
 
     return int(sum(map(ord, text)) % 1e6)
@@ -49,30 +46,6 @@ def pairIdx2flatIdx(i, j, n, undirected=True):
 
 def remainder(x: torch.Tensor, y: float):
 
-    # TORCH REMAINDER HAS A PROBLEM
-    #return torch.remainder(x, y)
-    # return torch.remainder(torch.floor(x*(1./y)), 1)/(y)
-
-
-    # return torch.as_tensor([math.remainder(val, y) for val in x])
-    #return torch.as_tensor([math.fmod(1e6*val, 1e6*y)/1e6 for val in x])
-    # print(x, y)
-    # remainders = torch.as_tensor([math.fmod(torch.round(val, decimals=5), torch.round(torch.as_tensor([y]), decimals=5)) for val in x])
-    # remainders[remainders < 0] += y
-    # print(remainders)
-    # print("----")
-    # return remainders
-    # return torch.as_tensor([math.fmod(val, y) for val in x])
-
-    # remainders = torch.as_tensor([to.fmod(val * (1 if y > 1 else 1. / y), y if y > 1 else 1. / y) for val in x]) / (1 if y > 1 else (1. / y))
-    # remainders = torch.as_tensor([math.remainder(val, y) for val in x])
-    # remainders[remainders < 0] += y
-
-    # if y < 1:
-    #     remainders = torch.remainder(torch.floor(x*(1./y)), 1) / (y)
-    # else:
-    #     remainders = torch.remainder(x, y)
-
     remainders = torch.remainder(x, y)
     remainders[torch.abs(remainders - y) < EPS] = 0
 
@@ -83,31 +56,15 @@ def div(x: torch.Tensor, y: float, decimals=5):
 
     return torch.round(torch.div(torch.round(x, decimals=decimals), y, )).type(torch.int)
 
-# def collate_fn(batch):
-#
-#     node_pairs = []
-#     event_lists = []
-#
-#     for items in batch:
-#         for pair, events in items:
-#             node_pairs.append(pair)
-#             event_lists.append(torch.as_tensor(events))
-#
-#     return torch.as_tensor(node_pairs).transpose(0, 1), event_lists
-
 
 def vectorize(x: torch.Tensor):
 
     return x.flatten(-2)
 
-    # return x.transpose(-2, -1).flatten(-2)
-
 
 def unvectorize(x: torch.Tensor, size):
 
     return x.reshape((size[0], size[1], size[2]))
-
-    # return x.reshape((size[0], size[2], size[1])).transpose(-1, -2)
 
 
 def mean_normalization(x: torch.Tensor):
@@ -122,8 +79,6 @@ def mean_normalization(x: torch.Tensor):
     else:
 
         raise ValueError("Input of the tensor must be 2 or 3!")
-
-
 
 def plot_events(num_of_nodes, samples, labels, title=""):
 

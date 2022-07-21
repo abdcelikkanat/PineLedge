@@ -10,12 +10,10 @@ import utils
 class LearningModel(BaseModel, torch.nn.Module):
 
     def __init__(self, data, nodes_num, bins_num, dim, last_time: float, approach="nhpp",
-                 prior_k: int = 4, prior_lambda: float = 1.0,
+                 prior_k: int = 10, prior_lambda: float = 1.0,
                  node_pairs_mask: torch.Tensor = None,
-                 learning_rate: float = 0.1, batch_size: int = None, epochs_num: int = 100,
+                 learning_rate: float = 0.1, batch_size: int = None, epoch_num: int = 100,
                  steps_per_epoch=10, device: torch.device = None, verbose: bool = False, seed: int = 0):
-
-        assert bins_num > 2, print("Number of bins must be greater than 2!")
 
         super(LearningModel, self).__init__(
             x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim), device=device) - 1, requires_grad=False),
@@ -38,135 +36,83 @@ class LearningModel(BaseModel, torch.nn.Module):
             seed=seed
         )
 
-        self.__data = data
+        self.__events_pairs = data[0]
+        self.__events = data[1]
         self.__approach = approach
 
+        # Parameters for optimization
         self.__learning_procedure = "seq"
         self.__learning_rate = learning_rate
-        self.__epochs_num = epochs_num
+        self.__epoch_num = epoch_num
+        self.__batch_size = self.get_number_of_nodes() if batch_size is None else batch_size
         self.__steps_per_epoch = steps_per_epoch
-
+        self.__learning_param_names = [["x0", "beta", ], ["v"], ["reg_params"]]  # Order matters for sequential learning
+        self.__learning_param_epoch_weights = [1, 1, 1]
         self.__optimizer = None
 
-        self.__verbose = verbose
         self.__device = device
-
-        # Order matters for sequential learning
-        self.__learning_param_names = [["x0", "beta", ], ["v"], ["reg_params"]] #[["x0", "v", ], ["reg_params"], ["beta"]]
-        self.__learning_param_epoch_weights = [1, 1, 1]
-
-        self.__add_prior = False  # Do not change
-
-        self.__batch_size = self.get_number_of_nodes() if batch_size is None else batch_size
-        self.__events_pairs = self.__data[0]
-        self.__events = self.__data[1]
-        # self.__all_lengths = torch.as_tensor(list(map(len, self.__events)), dtype=torch.int, device=self.__device)
-        # self.__all_events = torch.as_tensor([e for events in self.__events for e in events], dtype=torch.float, device=self.__device)
-        # self.__all_pairs = torch.repeat_interleave(self.__events_pairs, self.__all_lengths, dim=0)
-        self.__sampling_weights = torch.ones(self.get_number_of_nodes())
-        # self.__sparse_row = (self.__all_pairs[:, 0] * self.get_number_of_nodes())+ self.__all_pairs[:, 1]
+        self.__verbose = verbose
 
         self.__loss = []
 
-        '''
-        if verbose:
-            print("+ Pre-computation process has started...")
-            init_time = time.time()
-        self.__pair_events = [[[] for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
-        print(sys.getsizeof(self.__pair_events), len(self.__pair_events))
+        # Pre-computation of some coefficients
 
-        self.__events_count = torch.as_tensor(
-            [[0 for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
+        self.__events_count, self.__alpha1, self.__alpha2 = self.__compute_coefficients(
+            self._nodes_num, self.__events_pairs, self.__events, self._bins_num
         )
-        self.__alpha1 = torch.as_tensor(
-            [[0 for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
-        )
-        self.__alpha2 = torch.as_tensor(
-            [[0 for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
-        )
-        for pair, events in zip(self.__events_pairs, self.__events):
-            flatIdx = utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=self.get_number_of_nodes())
-            batch_idx = torch.div(torch.as_tensor(events), self._bin_width, rounding_mode="floor").type(torch.int)
-            batch_idx[batch_idx == self._bins_num] = self._bins_num - 1
-            for e, b in zip(events, batch_idx):
-                self.__pair_events[flatIdx][b].append(e)
 
-            for b in range(self._bins_num):
-                self.__events_count[flatIdx][b] = len(self.__pair_events[flatIdx][b])
-                self.__alpha1[flatIdx][b] = torch.sum(utils.remainder(
-                    x=torch.as_tensor(self.__pair_events[flatIdx][b]), y=self._bin_width
-                ))
-                self.__alpha2[flatIdx][b] = torch.sum(utils.remainder(
-                    x=torch.as_tensor(self.__pair_events[flatIdx][b]), y=self._bin_width
-                ) ** 2)
-        if verbose:
-            print(f"\t Done! {time.time()-init_time}")
-        '''
+    def __compute_coefficients(self, nodes_num, events_pairs, events, bins_num):
 
-        if verbose:
-            print("+ Pre-computation process has started...")
+        if self.__verbose:
+            print(f"- The pre-computation of the coefficients has started.")
             init_time = time.time()
 
-        self.__pair_events = dict(zip([utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=self._nodes_num) for pair in self.__events_pairs], self.__events))
-        self.__events_count, self.__alpha1, self.__alpha2 = dict(), dict(), dict()
-        for pairIdx in self.__pair_events.keys():
-            self.__events_count[pairIdx] = torch.zeros(size=(self._bins_num, ), dtype=torch.int)
-            self.__alpha1[pairIdx] = torch.zeros(size=(self._bins_num, ), dtype=torch.float)
-            self.__alpha2[pairIdx] = torch.zeros(size=(self._bins_num, ), dtype=torch.float)
+        # Initialization
+        events_count = {
+            utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=nodes_num):
+                torch.zeros(size=(bins_num,), dtype=torch.int, device=self.__device) for pair in events_pairs
+        }
+        alpha1 = {
+            utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=nodes_num):
+                torch.zeros(size=(bins_num,), dtype=torch.float, device=self.__device) for pair in events_pairs
+        }
+        alpha2 = {
+            utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=nodes_num):
+                torch.zeros(size=(bins_num,), dtype=torch.float, device=self.__device) for pair in events_pairs
+        }
 
-            bin_idx = torch.div(
-                torch.as_tensor(self.__pair_events[pairIdx]), self._bin_width, rounding_mode="floor"
-            ).type(torch.long)
-            bin_idx[bin_idx == self._bins_num] = self._bins_num - 1
-            self.__events_count[pairIdx].index_add_(
-                dim=0, index=bin_idx,
-                source=torch.ones(len(bin_idx), dtype=torch.int)
+        for pairIdx, pair in enumerate(events_pairs):
+            # Get the corresponding index
+            dictIdx = utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=nodes_num)
+
+            # Get the bin indices
+            bin_idx = utils.div(
+                torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.__device), self._bin_width
             )
-            self.__alpha1[pairIdx].index_add_(
+            bin_idx[bin_idx == bins_num] = bins_num - 1
+
+            events_count[dictIdx].index_add_(
                 dim=0, index=bin_idx,
-                source=utils.remainder(torch.as_tensor(self.__pair_events[pairIdx], dtype=torch.float), self._bin_width)
+                source=torch.ones(len(bin_idx), dtype=torch.int, device=self.__device)
             )
-            self.__alpha2[pairIdx].index_add_(
+            alpha1[dictIdx].index_add_(
                 dim=0, index=bin_idx,
-                source=utils.remainder(torch.as_tensor(self.__pair_events[pairIdx], dtype=torch.float), self._bin_width)**2
+                source=utils.remainder(
+                    torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.__device),
+                    self._bin_width
+                )
+            )
+            alpha2[dictIdx].index_add_(
+                dim=0, index=bin_idx,
+                source=utils.remainder(
+                    torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.__device),
+                    self._bin_width) ** 2
             )
 
-        if verbose:
-            print(f"\t Done! {time.time()-init_time}")
-        pass
-        # if verbose:
-        #     print("+ Pre-computation process has started...")
-        #     init_time = time.time()
-        # for pair in
-        # self.__pair_events = {}
-        # print(sys.getsizeof(self.__pair_events), len(self.__pair_events))
-        #
-        # self.__events_count = torch.as_tensor(
-        #     [[0 for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
-        # )
-        # self.__alpha1 = torch.as_tensor(
-        #     [[0 for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
-        # )
-        # self.__alpha2 = torch.as_tensor(
-        #     [[0 for _ in range(self._bins_num)] for _ in utils.pair_iter(n=self._nodes_num)]
-        # )
-        # for pair, events in zip(self.__events_pairs, self.__events):
-        #     flatIdx = utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=self.get_number_of_nodes())
-        #     batch_idx = torch.div(torch.as_tensor(events), self._bin_width, rounding_mode="floor").type(torch.int)
-        #     batch_idx[batch_idx == self._bins_num] = self._bins_num - 1
-        #     for e, b in zip(events, batch_idx):
-        #         self.__pair_events[flatIdx][b].append(e)
-        #
-        #     for b in range(self._bins_num):
-        #         self.__events_count[flatIdx][b] = len(self.__pair_events[flatIdx][b])
-        #         self.__alpha1[flatIdx][b] = torch.sum(utils.remainder(
-        #             x=torch.as_tensor(self.__pair_events[flatIdx][b]), y=self._bin_width
-        #         ))
-        #         self.__alpha2[flatIdx][b] = torch.sum(utils.remainder(
-        #             x=torch.as_tensor(self.__pair_events[flatIdx][b]), y=self._bin_width
-        #         ) ** 2)
-        # if verbose:
-        #     print(f"\t Done! {time.time()-init_time}")
+        if self.__verbose:
+            print("\t+ Completed in {:.2f} secs.".format(time.time() - init_time))
+
+        return events_count, alpha1, alpha2
 
     def learn(self, learning_type=None, loss_file_path=None):
 
@@ -225,14 +171,17 @@ class LearningModel(BaseModel, torch.nn.Module):
 
     def __sequential_learning(self):
 
+        if self.__verbose:
+            print("- Training started (Sequential Learning).")
+
         current_epoch = 0
         current_param_group_idx = 0
-        group_epoch_counts = (self.__epochs_num * torch.cumsum(
+        group_epoch_counts = (self.__epoch_num * torch.cumsum(
             torch.as_tensor([0] + self.__learning_param_epoch_weights, device=self._device, dtype=torch.float), dim=0
         ) / sum(self.__learning_param_epoch_weights)).type(torch.int)
         group_epoch_counts = group_epoch_counts[1:] - group_epoch_counts[:-1]
 
-        while current_epoch < self.__epochs_num:
+        while current_epoch < self.__epoch_num:
 
             # Set the gradients to True
             for param_name in self.__learning_param_names[current_param_group_idx]:
@@ -252,7 +201,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         current_epoch = 0
         current_param_group_idx = 0
-        while current_epoch < self.__epochs_num:
+        while current_epoch < self.__epoch_num:
 
             # Set the gradients to True
             for param_name in self.__learning_param_names[current_param_group_idx]:
@@ -287,87 +236,54 @@ class LearningModel(BaseModel, torch.nn.Module):
 
             total_batch_loss += batch_loss
 
-            # Set the gradients to 0
-            optimizer.zero_grad()
+        # Set the gradients to 0
+        optimizer.zero_grad()
 
-            # Backward pass
-            batch_loss.backward()
+        # Backward pass
+        total_batch_loss.backward()
 
-            # Perform a step
-            optimizer.step()
+        # Perform a step
+        optimizer.step()
 
         # Get the average epoch loss
         epoch_loss = total_batch_loss / float(self.__steps_per_epoch)
 
         if not math.isfinite(epoch_loss):
-            print(f"Epoch loss is {epoch_loss}, stopping training")
+            print(f"- Epoch loss is {epoch_loss}, stopping training")
             sys.exit(1)
 
-        if self.__verbose and (epoch_num % 10 == 0 or epoch_num == self.__epochs_num - 1):
-            print(f"| Epoch = {epoch_num} | Loss/train: {epoch_loss} | Epoch Elapsed time: {time.time() - init_time}")
+        if self.__verbose and (epoch_num % 10 == 0 or epoch_num == self.__epoch_num - 1):
+            time_diff = time.time() - init_time
+            print("\t+ Epoch = {} | Loss/train: {} | Elapsed time: {:.2f}".format(epoch_num, epoch_loss, time_diff))
 
     def __train_one_batch(self, batch_num):
 
         self.train()
 
-        sampled_nodes = torch.multinomial(self.__sampling_weights, self.__batch_size, replacement=False)
+        sampled_nodes = torch.multinomial(
+            torch.ones(self.get_number_of_nodes(), dtype=torch.float, device=self.__device),
+            self.__batch_size, replacement=False
+        )
         sampled_nodes, _ = torch.sort(sampled_nodes, dim=0)
         batch_pairs = torch.combinations(sampled_nodes, r=2).T.type(torch.int)
-
-        # indices = (self._nodes_num-1) * batch_pairs[0] - \
-        #           torch.div(batch_pairs[0]*(batch_pairs[0]+1), 2, rounding_mode="trunc").type(torch.int) + \
-        #           (batch_pairs[1]-1)
-
-        # print(sampled_nodes)
-        # print(batch_pairs)
-        # z = [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.int)) for pair in batch_pairs.T.tolist()]
-        # # print( z )
-        # z = torch.tensor(z)
-        # print( z.sum(dim=1) )
-        # print(
-        #     (
-        #         [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), 's') for pair in batch_pairs.T.tolist()],
-        #     )
-        # )
-        # print(utils.pairIdx2flatIdx(batch_pairs.T[0][0], batch_pairs.T[0][1],self._nodes_num) )
-        # print(list(self.__events_count.keys())[0])
-        # # print( torch.as_tensor(z).shape )
-
-        # print(
-        #     torch.as_tensor(
-        #         [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num),
-        #                                  torch.zeros(size=(self._bins_num,), dtype=torch.int)).tolist() for pair in
-        #          batch_pairs.T.tolist()],
-        #         dtype=torch.int
-        #     )
-        # )
-        # print(self.__events[0])
-        # print(self.get_bins_bounds())
 
         # Forward pass
         average_batch_loss = self.forward(
             nodes=sampled_nodes, unique_node_pairs=batch_pairs,
             events_count=torch.as_tensor(
-                [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.int)).tolist() for pair in batch_pairs.T.tolist()],
+                [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.int, device=self.__device)).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.int
             ),
             alpha1=torch.as_tensor(
-                [self.__alpha1.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.float)).tolist() for pair in batch_pairs.T.tolist()],
+                [self.__alpha1.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.float, device=self.__device)).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.float
             ),
             alpha2=torch.as_tensor(
-                [self.__alpha2.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.float)).tolist() for pair in batch_pairs.T.tolist()],
+                [self.__alpha2.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.float, device=self.__device)).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.float
             ),
             batch_num=batch_num
         )
-        # average_batch_loss = self.forward(
-        #     nodes=sampled_nodes, unique_node_pairs=batch_pairs,
-        #     events_count=torch.index_select(self.__events_count, index=indices, dim=0),
-        #     alpha1=torch.index_select(self.__alpha1, index=indices, dim=0),
-        #     alpha2=torch.index_select(self.__alpha2, index=indices, dim=0),
-        #     batch_num=batch_num
-        # )
 
         return average_batch_loss
 

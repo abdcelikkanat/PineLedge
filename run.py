@@ -1,16 +1,13 @@
-import os
-from argparse import ArgumentParser, RawTextHelpFormatter
+import pickle
 import torch
+from argparse import ArgumentParser, RawTextHelpFormatter
 from src.learning import LearningModel
 from src.events import Events
 
-# global control for device
+# Global control for device
 CUDA = True
-# availability for different devices
-avail_device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-# choosing device and setting default tensor, meaning that each new tensor has a default device pointing to
-if (CUDA) and (avail_device == "cuda:0"):
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+if (CUDA) and (device == "cuda:0"):
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
@@ -21,10 +18,10 @@ def parse_arguments():
                             formatter_class=RawTextHelpFormatter)
 
     parser.add_argument(
-        '--input', type=str, required=True, help='Path of the dataset'
+        '--dataset', type=str, required=True, help='Path of the dataset'
     )
     parser.add_argument(
-        '--output', type=str, required=True, help='Path of the model'
+        '--model_path', type=str, required=True, help='Path of the model'
     )
     parser.add_argument(
         '--log', type=str, required=False, default=None, help='Path of the log file'
@@ -42,7 +39,7 @@ def parse_arguments():
         '--prior_lambda', type=float, default=1e5, required=False, help='Scaling coefficient of the covariance'
     )
     parser.add_argument(
-        '--epochs_num', type=int, default=100, required=False, help='Number of epochs'
+        '--epoch_num', type=int, default=100, required=False, help='Number of epochs'
     )
     parser.add_argument(
         '--spe', type=int, default=1, required=False, help='Number of steps per epoch'
@@ -57,7 +54,7 @@ def parse_arguments():
         '--seed', type=int, default=19, required=False, help='Seed value to control the randomization'
     )
     parser.add_argument(
-        '--verbose', type=bool, default=0, required=False, help='Verbose'
+        '--verbose', type=bool, default=1, required=False, help='Verbose'
     )
 
     return parser.parse_args()
@@ -65,15 +62,15 @@ def parse_arguments():
 
 def process(args):
 
-    dataset_path = args.input
-    model_path = args.output
+    dataset_path = args.dataset
+    model_path = args.model_path
     log_file_path = args.log
 
     bins_num = args.bins_num
     dim = args.dim
     K = args.k
     prior_lambda = args.prior_lambda
-    epochs_num = args.epochs_num
+    epoch_num = args.epoch_num
     steps_per_epoch = args.spe
     batch_size = args.batch_size
     learning_rate = args.lr
@@ -94,17 +91,33 @@ def process(args):
     nodes_num = all_events.number_of_nodes()
     data = all_events.get_pairs(), all_events.get_events()
 
-    # Run the model
-    lm = LearningModel(data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1., batch_size=batch_size,
-                       prior_k=K, prior_lambda=prior_lambda,
-                       learning_rate=learning_rate, epochs_num=epochs_num, steps_per_epoch=steps_per_epoch,
-                       verbose=verbose, seed=seed, device=torch.device(avail_device))
+    if verbose:
+        print(f"- The dataset statistics:")
+        print(f"\t+ The number of nodes: {all_events.number_of_nodes()}")
+        print(f"\t+ The total number of edges: {all_events.number_of_total_events()}")
+        print(f"\t+ The number of pairs having events: {all_events.number_of_event_pairs()}")
+        print(f"\t+ Average number of events: {all_events.number_of_total_events()/all_events.number_of_event_pairs()}")
 
+    if verbose:
+        print(f"- The active device is {device}.")
+
+    # Run the model
+    lm = LearningModel(
+        data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1., batch_size=batch_size,
+        prior_k=K, prior_lambda=prior_lambda,
+        learning_rate=learning_rate, epoch_num=epoch_num, steps_per_epoch=steps_per_epoch,
+        verbose=verbose, seed=seed, device=torch.device(device)
+    )
     lm.learn(loss_file_path=log_file_path)
-    torch.save(lm.state_dict(), model_path)
+
+    if verbose:
+        print(f"- Model file is saving.")
+        print(f"\t+ Target path: {model_path}")
+        with open(model_path, 'wb') as f:
+            pickle.dump(lm, f, pickle.HIGHEST_PROTOCOL)
+        print(f"\t+ Completed.")
 
 
 if __name__ == "__main__":
     args = parse_arguments()
-
     process(args)
