@@ -35,6 +35,7 @@ output_path = args.output_path
 print("+ Model is being read...")
 # Load the model
 kwargs, lm_state = torch.load(model_path, map_location=torch.device('cpu'))
+kwargs['device'] = 'cpu'
 lm = LearningModel(**kwargs)
 lm.load_state_dict(lm_state)
 print("\t- Completed.")
