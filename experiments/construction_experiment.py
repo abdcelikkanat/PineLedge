@@ -3,11 +3,16 @@ import os
 import pickle as pkl
 from argparse import ArgumentParser, RawTextHelpFormatter
 from sklearn.metrics import average_precision_score, roc_auc_score
+import utils
+from src.events import Events
 
 ########################################################################################################################
 parser = ArgumentParser(description="Examples: \n", formatter_class=RawTextHelpFormatter)
 parser.add_argument(
     '--dataset_folder', type=str, required=True, help='Path of the dataset folder'
+)
+parser.add_argument(
+    '--intervals', type=int, required=True, help='Number of intervals'
 )
 parser.add_argument(
     '--model_path', type=str, required=True, help='Path of the model'
@@ -22,6 +27,7 @@ args = parser.parse_args()
 seed = 19
 # Set some parameters
 dataset_folder = args.dataset_folder
+test_intervals_num = args.intervals
 model_path = args.model_path
 output_path = args.output_path
 
@@ -35,14 +41,9 @@ print("\t- Completed.")
 
 ########################################################################################################################
 
-# test_intervals_num = len(samples)
-test_intervals_num = 8
-
 file = open(output_path, 'w')
 print("Printing...")
 
-import utils
-from src.events import Events
 # Load the dataset
 all_events = Events(seed=seed)
 all_events.read(dataset_folder)
