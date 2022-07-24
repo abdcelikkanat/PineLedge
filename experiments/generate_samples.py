@@ -30,10 +30,10 @@ threshold = 1
 test_intervals = torch.linspace(0, 1.0, test_intervals_num+1)
 
 samples, labels = [[] for _ in range(test_intervals_num)], [[] for _ in range(test_intervals_num)]
-for idx, pair in enumerate(all_events.get_pairs()):
+for idx, pair in enumerate(utils.pair_iter(n=nodes_num, undirected=True)):
 
-    if idx % int(all_events.number_of_event_pairs() / 10) == 0:
-        print("+ {:.2f}% completed.".format(idx * 100 / all_events.number_of_event_pairs()))
+    if idx % int(nodes_num * (nodes_num-1) / 2 / 10) == 0:
+        print("+ {:.2f}% completed.".format(idx * 100 / (nodes_num * (nodes_num-1) / 2)))
 
     i, j = pair
     pair_events = torch.as_tensor(all_events[(i, j)][1])
