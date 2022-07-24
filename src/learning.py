@@ -44,14 +44,11 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__learning_procedure = "seq"
         self.__learning_rate = learning_rate
         self.__epoch_num = epoch_num
-        self.__batch_size = self.get_number_of_nodes() if batch_size is None else batch_size
+        self.__batch_size = nodes_num if batch_size is None else batch_size
         self.__steps_per_epoch = steps_per_epoch
         self.__learning_param_names = [["x0", "beta", ], ["v"], ["reg_params"]]  # Order matters for sequential learning
         self.__learning_param_epoch_weights = [1, 1, 1]
         self.__optimizer = None
-
-        self.__device = device
-        self.__verbose = verbose
 
         self.__loss = []
 
@@ -62,22 +59,22 @@ class LearningModel(BaseModel, torch.nn.Module):
 
     def __compute_coefficients(self, nodes_num, events_pairs, events, bins_num):
 
-        if self.__verbose:
+        if self.get_verbose():
             print(f"- The pre-computation of the coefficients has started.")
             init_time = time.time()
 
         # Initialization
         events_count = {
             utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=nodes_num):
-                torch.zeros(size=(bins_num,), dtype=torch.int, device=self.__device) for pair in events_pairs
+                torch.zeros(size=(bins_num,), dtype=torch.int, device=self.get_device()) for pair in events_pairs
         }
         alpha1 = {
             utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=nodes_num):
-                torch.zeros(size=(bins_num,), dtype=torch.float, device=self.__device) for pair in events_pairs
+                torch.zeros(size=(bins_num,), dtype=torch.float, device=self.get_device()) for pair in events_pairs
         }
         alpha2 = {
             utils.pairIdx2flatIdx(i=pair[0], j=pair[1], n=nodes_num):
-                torch.zeros(size=(bins_num,), dtype=torch.float, device=self.__device) for pair in events_pairs
+                torch.zeros(size=(bins_num,), dtype=torch.float, device=self.get_device()) for pair in events_pairs
         }
 
         for pairIdx, pair in enumerate(events_pairs):
@@ -86,29 +83,29 @@ class LearningModel(BaseModel, torch.nn.Module):
 
             # Get the bin indices
             bin_idx = utils.div(
-                torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.__device), self._bin_width
+                torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.get_device()), self._bin_width
             )
             bin_idx[bin_idx == bins_num] = bins_num - 1
 
             events_count[dictIdx].index_add_(
                 dim=0, index=bin_idx,
-                source=torch.ones(len(bin_idx), dtype=torch.int, device=self.__device)
+                source=torch.ones(len(bin_idx), dtype=torch.int, device=self.get_device())
             )
             alpha1[dictIdx].index_add_(
                 dim=0, index=bin_idx,
                 source=utils.remainder(
-                    torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.__device),
+                    torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.get_device()),
                     self._bin_width
                 )
             )
             alpha2[dictIdx].index_add_(
                 dim=0, index=bin_idx,
                 source=utils.remainder(
-                    torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.__device),
+                    torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.get_device()),
                     self._bin_width) ** 2
             )
 
-        if self.__verbose:
+        if self.get_verbose():
             print("\t+ Completed in {:.2f} secs.".format(time.time() - init_time))
 
         return events_count, alpha1, alpha2
@@ -170,13 +167,13 @@ class LearningModel(BaseModel, torch.nn.Module):
 
     def __sequential_learning(self):
 
-        if self.__verbose:
+        if self.get_verbose():
             print("- Training started (Sequential Learning).")
 
         current_epoch = 0
         current_param_group_idx = 0
         group_epoch_counts = (self.__epoch_num * torch.cumsum(
-            torch.as_tensor([0] + self.__learning_param_epoch_weights, device=self._device, dtype=torch.float), dim=0
+            torch.as_tensor([0] + self.__learning_param_epoch_weights, device=self.get_device(), dtype=torch.float), dim=0
         ) / sum(self.__learning_param_epoch_weights)).type(torch.int)
         group_epoch_counts = group_epoch_counts[1:] - group_epoch_counts[:-1]
 
@@ -251,7 +248,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             print(f"- Epoch loss is {epoch_loss}, stopping training")
             sys.exit(1)
 
-        if self.__verbose and (epoch_num % 10 == 0 or epoch_num == self.__epoch_num - 1):
+        if self.get_verbose() and (epoch_num % 10 == 0 or epoch_num == self.__epoch_num - 1):
             time_diff = time.time() - init_time
             print("\t+ Epoch = {} | Loss/train: {} | Elapsed time: {:.2f}".format(epoch_num, epoch_loss, time_diff))
 
@@ -260,7 +257,7 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.train()
 
         sampled_nodes = torch.multinomial(
-            torch.ones(self.get_number_of_nodes(), dtype=torch.float, device=self.__device),
+            torch.ones(self.get_number_of_nodes(), dtype=torch.float, device=self.get_device()),
             self.__batch_size, replacement=False
         )
         sampled_nodes, _ = torch.sort(sampled_nodes, dim=0)
@@ -270,15 +267,15 @@ class LearningModel(BaseModel, torch.nn.Module):
         average_batch_loss = self.forward(
             nodes=sampled_nodes, unique_node_pairs=batch_pairs,
             events_count=torch.as_tensor(
-                [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.int, device=self.__device)).tolist() for pair in batch_pairs.T.tolist()],
+                [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self.get_number_of_nodes()), torch.zeros(size=(self.get_bins_num(),), dtype=torch.int, device=self.get_device())).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.int
             ),
             alpha1=torch.as_tensor(
-                [self.__alpha1.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.float, device=self.__device)).tolist() for pair in batch_pairs.T.tolist()],
+                [self.__alpha1.get(utils.pairIdx2flatIdx(pair[0], pair[1], self.get_number_of_nodes()), torch.zeros(size=(self.get_bins_num(),), dtype=torch.float, device=self.get_device())).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.float
             ),
             alpha2=torch.as_tensor(
-                [self.__alpha2.get(utils.pairIdx2flatIdx(pair[0], pair[1], self._nodes_num), torch.zeros(size=(self._bins_num,), dtype=torch.float, device=self.__device)).tolist() for pair in batch_pairs.T.tolist()],
+                [self.__alpha2.get(utils.pairIdx2flatIdx(pair[0], pair[1], self.get_number_of_nodes()), torch.zeros(size=(self.get_bins_num(),), dtype=torch.float, device=self.get_device())).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.float
             ),
             batch_num=batch_num
@@ -326,15 +323,42 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         params = dict()
 
-        params['_nodes_num'] = self._nodes_num
-        params['_dim'] = self._dim
-        params['_seed'] = self._seed
+        params['_nodes_num'] = self.get_number_of_nodes()
+        params['_dim'] = self.get_dim()
+        params['_seed'] = self.get_seed()
 
         for name, param in self.named_parameters():
             # if param.requires_grad:
             params[name.replace(self.__class__.__name__+'_', '')] = param
 
-        params['_prior_lambda'] = self._prior_lambda
-        params['_prior_sigma'] = self._prior_sigma
+        params['_prior_lambda'] = self.get_prior_lambda()
+        params['_prior_sigma'] = self.get_prior_sigma()
 
         return params
+
+    def save(self, path):
+
+        if self.get_verbose():
+            print(f"- Model file is saving.")
+            print(f"\t+ Target path: {path}")
+
+        kwargs = {
+            'data': [self.__events_pairs, self.__events ],
+            'nodes_num': self.get_number_of_nodes(), 'bins_num': self.get_bins_num(), 'dim': self.get_dim(),
+            'last_time': self.get_last_time(), 'approach': self.__approach,
+            'prior_k': self.get_prior_k(), 'prior_lambda': self.get_prior_lambda(),
+            'node_pairs_mask': self.get_node_pair_mask(),
+            'learning_rate': self.__learning_rate, 'batch_size': self.__batch_size, 'epoch_num': self.__epoch_num,
+            'steps_per_epoch': self.__steps_per_epoch,
+            'device': self.get_device(), 'verbose': self.get_verbose(), 'seed': self.get_seed(),
+            # 'learning_procedure': self.__learning_procedure,
+            # 'learning_param_names': self.__learning_param_names,
+            # 'learning_param_epoch_weights': self.__learning_param_epoch_weights
+        }
+
+        torch.save([kwargs, self.state_dict()], path)
+
+        if self.get_verbose():
+            print(f"\t+ Completed.")
+
+

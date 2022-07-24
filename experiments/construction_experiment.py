@@ -1,10 +1,9 @@
 import torch
-import os
-import pickle as pkl
 from argparse import ArgumentParser, RawTextHelpFormatter
 from sklearn.metrics import average_precision_score, roc_auc_score
 import utils
 from src.events import Events
+from src.learning import LearningModel
 
 ########################################################################################################################
 parser = ArgumentParser(description="Examples: \n", formatter_class=RawTextHelpFormatter)
@@ -35,8 +34,9 @@ output_path = args.output_path
 
 print("+ Model is being read...")
 # Load the model
-with open(model_path, 'rb') as f:
-    lm = pkl.load(f)
+kwargs, lm_state = torch.load(model_path, map_location=torch.device('cpu'))
+lm = LearningModel(**kwargs)
+lm.load_state_dict(lm_state)
 print("\t- Completed.")
 
 ########################################################################################################################

@@ -455,6 +455,46 @@ class BaseModel(torch.nn.Module):
 
         return self._nodes_num
 
+    def get_bins_num(self):
+
+        return self._bins_num
+
+    def get_seed(self):
+
+        return self._seed
+
+    def get_verbose(self):
+
+        return self._verbose
+
+    def get_device(self):
+
+        return self._device
+
+    def get_last_time(self):
+
+        return self._last_time
+
+    def get_init_time(self):
+
+        return self._init_time
+
+    def get_prior_sigma(self):
+
+        return self._prior_sigma
+
+    def get_prior_lambda(self):
+
+        return self._prior_lambda
+
+    def get_prior_k(self):
+
+        return self._prior_C_Q.shape[1]
+
+    def get_node_pair_mask(self):
+
+        return self.__node_pairs_mask
+
     @staticmethod
     def get_B_factor(bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
                      prior_B_x0_c_sq: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):

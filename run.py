@@ -110,16 +110,8 @@ def process(args):
     )
     lm.learn(loss_file_path=log_file_path)
 
-    if verbose:
-        print(f"- Model file is saving.")
-        print(f"\t+ Target path: {model_path}")
-
-    torch.set_default_tensor_type('torch.FloatTensor')
-    lm = lm.cpu()
-    with open(model_path, 'wb') as f:
-        pickle.dump(lm.cpu(), f, pickle.HIGHEST_PROTOCOL)
-    if verbose:
-        print(f"\t+ Completed.")
+    # Save the model
+    lm.save(model_path)
 
 
 if __name__ == "__main__":
