@@ -113,8 +113,12 @@ def process(args):
     if verbose:
         print(f"- Model file is saving.")
         print(f"\t+ Target path: {model_path}")
-        with open(model_path, 'wb') as f:
-            pickle.dump(lm.cpu, f, pickle.HIGHEST_PROTOCOL)
+
+    torch.set_default_tensor_type('torch.FloatTensor')
+    lm = lm.cpu()
+    with open(model_path, 'wb') as f:
+        pickle.dump(lm.cpu(), f, pickle.HIGHEST_PROTOCOL)
+    if verbose:
         print(f"\t+ Completed.")
 
 
