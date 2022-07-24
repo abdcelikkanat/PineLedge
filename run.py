@@ -114,7 +114,7 @@ def process(args):
         print(f"- Model file is saving.")
         print(f"\t+ Target path: {model_path}")
         with open(model_path, 'wb') as f:
-            pickle.dump(lm, f, pickle.HIGHEST_PROTOCOL)
+            pickle.dump(lm.cpu, f, pickle.HIGHEST_PROTOCOL)
         print(f"\t+ Completed.")
 
 
