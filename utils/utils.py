@@ -134,4 +134,4 @@ def linearIdx2matIdx(idx, n, k):
 
         num += 1
 
-    return result
+    return result.tolist()
