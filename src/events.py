@@ -32,7 +32,6 @@ class Events:
         if path is not None or data is not None:
             self.__initialize()
 
-
         # Set the seed value
         self.__set_seed(seed=seed)
 

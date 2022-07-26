@@ -17,15 +17,15 @@ nodes_num = sum(cluster_sizes)
 bins_num = 100
 
 prior_lambda = 1e0
-prior_sigma = 0.1 #1e-1
+prior_sigma = 0.1
 prior_B_x0_c = 2e+0
-prior_B_sigma = 1e-4 #1e-4
+prior_B_sigma = 1e-4
 
 beta = [1.25]*nodes_num #torch.randn(size=(nodes_num, )) #[0.05]*nodes_num
 
 # Set the parameters
 verbose = True
-seed = 9
+seed = 19
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 ########################################################################################################################
@@ -34,12 +34,11 @@ dataset_name = f"{len(cluster_sizes)}_clusters_mg_B={bins_num}_noise-sigma={prio
                f"_x0-c={prior_B_x0_c}_rbf-sigma={prior_B_sigma}_lambda={prior_lambda}_sizes="\
                +"_".join(map(str, cluster_sizes)) + f"_beta={beta[0]}"
 
-# dataset_folder = os.path.join(utils.BASE_FOLDER, "datasets", "synthetic", dataset_name)
-dataset_folder = os.path.join("/Volumes/TOSHIBA EXT/RESEARCH/nikolaos/paper/pivem/", dataset_name)
+dataset_folder = os.path.join(utils.BASE_FOLDER, "datasets", "synthetic", dataset_name)
 node2group_path = os.path.join(dataset_folder, f"{dataset_name}_node2group.pkl")
 
 # Check if the file exists
-# assert not os.path.exists(dataset_folder), "This folder path exists!"
+assert not os.path.exists(dataset_folder), "This folder path exists!"
 
 # Create the folder of the dataset
 if not os.path.exists(dataset_folder):
