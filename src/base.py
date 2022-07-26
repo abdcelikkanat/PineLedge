@@ -284,8 +284,7 @@ class BaseModel(torch.nn.Module):
             temp_interval = interval
         interval = temp_interval
         interval_idx = utils.div(interval, self._bin_width)
-        # print(interval)
-        # print(interval_idx)
+
         x0 = mean_normalization(self._x0)
         v = mean_normalization(self._v)
         beta = self._beta
@@ -308,7 +307,6 @@ class BaseModel(torch.nn.Module):
             x0=torch.repeat_interleave(delta_x0, repeats=len(interval)-1, dim=0),
             v=torch.repeat_interleave(delta_v, repeats=len(interval)-1, dim=1),
         ).unsqueeze(1)
-        # print(delta_xt.shape, delta_x0.shape, delta_v.shape, len(interval)-1)
 
         delta_v = torch.index_select(delta_v, index=interval_idx[:-1], dim=0)
 
@@ -323,23 +321,13 @@ class BaseModel(torch.nn.Module):
         term1 = torch.exp(beta_ij.unsqueeze(0) + (r ** 2) - (norm_delta_xt ** 2))
 
         upper_bounds = interval[1:].clone()
-        # upper_bounds = utils.remainder(upper_bounds, self._bin_width)
-        # upper_bounds[utils.remainder(interval[1:], self._bin_width) <= utils.EPS] = self._bin_width
-        # upper_bounds[interval[1:] == 0] = 0
-        lower_bounds = interval[:-1].clone()
-        # lower_bounds[utils.remainder(interval[:-1], self._bin_width) <= utils.EPS] = 0
-
         upper_width_idx = utils.remainder(upper_bounds, self._bin_width) < utils.EPS
         upper_bounds = utils.remainder(upper_bounds, self._bin_width)
         upper_bounds[upper_width_idx] = self._bin_width
 
-        lower_bounds = utils.remainder(upper_bounds, self._bin_width)
+        lower_bounds = interval[:-1].clone()
+        lower_bounds = utils.remainder(lower_bounds, self._bin_width)
 
-        # print("Upper bound: ", upper_bounds)
-        # print("lower bound: ", lower_bounds)
-        # print("interval: ", interval, utils.div(interval, self._bin_width))
-        # print("norm v: ", norm_delta_v)
-        # print("r: ", r)
         term2_u = torch.erf(upper_bounds.unsqueeze(
             1) * norm_delta_v + r)
         term2_l = torch.erf(lower_bounds.unsqueeze(

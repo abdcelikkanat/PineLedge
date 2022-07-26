@@ -52,9 +52,9 @@ def remainder(x: torch.Tensor, y: float):
     return remainders
 
 
-def div(x: torch.Tensor, y: float, decimals=5):
+def div(x: torch.Tensor, y: float, decimals=6):
 
-    return torch.round(torch.div(torch.round(x, decimals=decimals), y, )).type(torch.int)
+    return torch.round(torch.div(torch.round(x, decimals=decimals), y, ), decimals=decimals).type(torch.int)
 
 
 def vectorize(x: torch.Tensor):
@@ -79,6 +79,7 @@ def mean_normalization(x: torch.Tensor):
     else:
 
         raise ValueError("Input of the tensor must be 2 or 3!")
+
 
 def plot_events(num_of_nodes, samples, labels, title=""):
 
