@@ -82,7 +82,7 @@ def generate_neg_samples(e):
 if __name__ == '__main__':
     # Set some parameters
     seed = 19
-    threads_num = 16
+    threads_num = 64
 
     args = parser.parse_args()
     dataset_folder = args.dataset_folder
@@ -101,6 +101,7 @@ if __name__ == '__main__':
     # Load the dataset
     all_events = Events(seed=seed)
     all_events.read(dataset_folder)
+    all_events.normalize(init_time=0, last_time=1.0)
     nodes_num = all_events.number_of_nodes()
 
     pairs = np.asarray(all_events.get_pairs(), dtype=int)
@@ -155,6 +156,7 @@ if __name__ == '__main__':
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
+    # Save the pairs and events
     pairs_file_path = os.path.join(output_folder, 'pairs.pkl')
     with open(pairs_file_path, 'wb') as f:
         pickle.dump(train_pairs, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -163,10 +165,21 @@ if __name__ == '__main__':
     with open(events_file_path, 'wb') as f:
         pickle.dump(train_pair_events, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    pos_sample_file_path = os.path.join(output_folder, 'pos.samples')
-    with open(pos_sample_file_path, 'wb') as f:
-        pickle.dump(pos_samples, f, protocol=pickle.HIGHEST_PROTOCOL)
+    # Save the samples
+    l = len(pos_samples) // 2
 
-    neg_sample_file_path = os.path.join(output_folder, 'neg.samples')
+    # Validation samples
+    pos_sample_file_path = os.path.join(output_folder, 'valid_pos.samples')
+    with open(pos_sample_file_path, 'wb') as f:
+        pickle.dump(pos_samples[:l], f, protocol=pickle.HIGHEST_PROTOCOL)
+    neg_sample_file_path = os.path.join(output_folder, 'valid_neg.samples')
     with open(neg_sample_file_path, 'wb') as f:
-        pickle.dump(neg_samples, f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(neg_samples[:l], f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # Testing samples
+    pos_sample_file_path = os.path.join(output_folder, 'test_pos.samples')
+    with open(pos_sample_file_path, 'wb') as f:
+        pickle.dump(pos_samples[l:], f, protocol=pickle.HIGHEST_PROTOCOL)
+    neg_sample_file_path = os.path.join(output_folder, 'test_neg.samples')
+    with open(neg_sample_file_path, 'wb') as f:
+        pickle.dump(neg_samples[l:], f, protocol=pickle.HIGHEST_PROTOCOL)
