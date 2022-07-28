@@ -31,7 +31,9 @@ parser.add_argument(
 parser.add_argument(
     '--train_ratio', type=float, required=False, default=0.9, help='Training set ratio'
 )
-
+parser.add_argument(
+    '--seed', type=int, default=19, required=False, help='Seed value'
+)
 ########################################################################################################################
 
 
@@ -87,6 +89,7 @@ if __name__ == '__main__':
     output_folder = args.output_folder
     r = args.radius
     train_ratio = args.train_ratio
+    seed = args.seed
 
     # Set the seed value for the randomness
     random.seed(seed)
@@ -121,16 +124,13 @@ if __name__ == '__main__':
     residual_pair_events = pair_events[train_samples_num:]
 
     ####################################################################################################################
-    print("Pos init")
     with Pool(threads_num, initializer=init_worker, initargs=(seed, r, nodes_num, all_events)) as p:
         output = p.map(generate_pos_samples, zip(residual_pairs, residual_pair_events))
     pos_samples = [value for sublist in output for value in sublist]
-    print("Pos ok")
-    print("Neg init")
+
     with Pool(threads_num, initializer=init_worker, initargs=(seed, r, nodes_num, all_events)) as p:
         output = p.map(generate_neg_samples, np.random.uniform(size=(len(pos_samples),)).tolist())
     neg_samples = output
-    print("neg ok")
 
     # # Sample positive and negative instances
     # pos_samples, neg_samples = [], []
