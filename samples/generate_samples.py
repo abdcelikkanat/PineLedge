@@ -155,7 +155,7 @@ if __name__ == '__main__':
 
     pos_samples_file_path = os.path.join(samples_file_folder, "pos.samples")
     neg_samples_file_path = os.path.join(samples_file_folder, "neg.samples")
-
+    print(neg_samples[10], neg_samples[12])
     with open(pos_samples_file_path, 'wb', ) as f:
         pickle.dump(pos_samples, f, pickle.HIGHEST_PROTOCOL)
 
