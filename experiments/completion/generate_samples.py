@@ -152,7 +152,8 @@ if __name__ == '__main__':
 
     ####################################################################################################################
 
-    # os.makedirs(output_folder)
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
 
     pairs_file_path = os.path.join(output_folder, 'pairs.pkl')
     with open(pairs_file_path, 'wb') as f:
