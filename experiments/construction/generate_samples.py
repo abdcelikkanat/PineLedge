@@ -66,7 +66,6 @@ if __name__ == '__main__':
         os.makedirs(samples_file_folder)
 
     pos_samples_file_path = os.path.join(samples_file_folder, "pos.samples")
-    print(neg_samples[10], neg_samples[12])
     with open(pos_samples_file_path, 'wb', ) as f:
         pickle.dump(pos_samples, f, pickle.HIGHEST_PROTOCOL)
 
