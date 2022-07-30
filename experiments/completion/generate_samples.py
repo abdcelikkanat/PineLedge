@@ -8,10 +8,10 @@ from sklearn.utils import shuffle
 from src.events import Events
 from argparse import ArgumentParser, RawTextHelpFormatter
 from multiprocessing import Pool
+import time
 
 ########################################################################################################################
 
-seed = None
 r = None
 nodes_num = None
 all_events = None
@@ -32,76 +32,28 @@ parser.add_argument(
     '--train_ratio', type=float, required=False, default=0.9, help='Training set ratio'
 )
 parser.add_argument(
+    '--threads', type=int, required=False, default=64, help='Number of threads'
+)
+parser.add_argument(
     '--seed', type=int, default=19, required=False, help='Seed value'
 )
 ########################################################################################################################
 
-
-def init_worker(param_seed, param_r, param_nodes_num, param_all_events):
-    global seed, r, nodes_num, all_events
-
-    seed = param_seed
-    r = param_r
-    nodes_num = param_nodes_num
-    all_events = param_all_events
-
-    # Set the seed value for the randomness
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-
-
-def generate_pos_samples(x):
-    global r
-    event_pair, events = x
-
-    pos_samples = [[event_pair[0], event_pair[1], max(0, e - r), min(1, e + r)] for e in events]
-
-    return pos_samples
-
-
-def generate_neg_samples(e):
-    global r, nodes_num, all_events
-
-    valid_sample = False
-    while not valid_sample:
-        pairs_num = int(nodes_num * (nodes_num - 1) / 2)
-        sampled_linear_pair_idx = np.random.randint(pairs_num, size=1)
-        sampled_pair = utils.linearIdx2matIdx(idx=sampled_linear_pair_idx, n=nodes_num, k=2)
-        events = np.asarray(all_events[sampled_pair][1])
-        # If there is no any link on the interval [e-r, e+r), add it into the negative samples
-        valid_sample = True if np.sum((min(1, e + r) > events) * (events >= max(0, e - r))) == 0 else False
-        if not valid_sample:
-            e = np.random.uniform(size=1).tolist()[0]
-
-    return [sampled_pair[0], sampled_pair[1], max(0, e - r), min(1, e + r)]
-
-########################################################################################################################
-
+# Set some parameters
+args = parser.parse_args()
+dataset_folder = args.dataset_folder
+output_folder = args.output_folder
+r = args.radius
+train_ratio = args.train_ratio
+threads_num = args.threads
+seed = args.seed
+utils.set_seed(seed=seed)
 
 if __name__ == '__main__':
-    # Set some parameters
-    seed = 19
-    threads_num = 64
-
-    args = parser.parse_args()
-    dataset_folder = args.dataset_folder
-    output_folder = args.output_folder
-    r = args.radius
-    train_ratio = args.train_ratio
-    seed = args.seed
-
-    # Set the seed value for the randomness
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
 
     ####################################################################################################################
-
     # Load the dataset
-    all_events = Events(seed=seed)
-    all_events.read(dataset_folder)
-    all_events.normalize(init_time=0, last_time=1.0)
+    all_events = utils.load_dataset(dataset_folder, seed=seed)
     nodes_num = all_events.number_of_nodes()
 
     pairs = np.asarray(all_events.get_pairs(), dtype=int)
@@ -125,31 +77,15 @@ if __name__ == '__main__':
     residual_pair_events = pair_events[train_samples_num:]
 
     ####################################################################################################################
-    with Pool(threads_num, initializer=init_worker, initargs=(seed, r, nodes_num, all_events)) as p:
-        output = p.map(generate_pos_samples, zip(residual_pairs, residual_pair_events))
+    init_time = time.time()
+    with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, all_events)) as p:
+        output = p.map(utils.generate_pos_samples, zip(residual_pairs, residual_pair_events))
     pos_samples = [value for sublist in output for value in sublist]
 
-    with Pool(threads_num, initializer=init_worker, initargs=(seed, r, nodes_num, all_events)) as p:
-        output = p.map(generate_neg_samples, np.random.uniform(size=(len(pos_samples),)).tolist())
+    init_time = time.time()
+    with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, all_events)) as p:
+        output = p.map(utils.generate_neg_samples, np.random.uniform(size=(len(pos_samples),)).tolist())
     neg_samples = output
-
-    # # Sample positive and negative instances
-    # pos_samples, neg_samples = [], []
-    # # Positive samples
-    # for event_pair, events in zip(residual_pairs, residual_pair_events):
-    #     pos_samples.extend([[event_pair[0], event_pair[1], max(0, e - r), min(1, e + r)] for e in events])
-    # # Negative samples
-    # sampled_event_times = np.random.uniform(size=(len(pos_samples),)).tolist()
-    # while len(neg_samples) < len(pos_samples):
-    #     pairs_num = int(nodes_num * (nodes_num - 1) / 2)
-    #     sampled_linear_pair_idx = np.random.randint(pairs_num, size=1)
-    #     sampled_pair = utils.linearIdx2matIdx(idx=sampled_linear_pair_idx, n=nodes_num, k=2)
-    #     events = np.asarray(all_events[sampled_pair][1])
-    #     e = sampled_event_times[len(neg_samples)]
-    #     # If there is no any link on the interval [e-r, e+r), add it into the negative samples
-    #     valid_sample = True if np.sum((e + r > events) * (events >= e - r)) == 0 else False
-    #     if valid_sample:
-    #         neg_samples.append([sampled_pair[0], sampled_pair[1], max(0, e - r), min(1, e + r)])
 
     ####################################################################################################################
 
