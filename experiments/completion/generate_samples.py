@@ -58,7 +58,6 @@ if __name__ == '__main__':
 
     pairs = np.asarray(all_events.get_pairs(), dtype=int)
     pair_events = np.asarray(all_events.get_events())
-    pairs, pair_events = shuffle(pairs, pair_events, random_state=seed)
 
     ####################################################################################################################
 
@@ -69,7 +68,12 @@ if __name__ == '__main__':
     residual_samples_num = event_pairs_num - train_samples_num
 
     # Train samples
+    pairs, pair_events = shuffle(pairs, pair_events, random_state=seed)
     train_pairs = pairs[:train_samples_num]
+    # Keep the number of nodes same
+    while len(np.unique(train_pairs))+1 != nodes_num:
+        pairs, pair_events = shuffle(pairs, pair_events, random_state=seed)
+        train_pairs = pairs[:train_samples_num]
     train_pair_events = pair_events[:train_samples_num]
 
     # Residual samples
@@ -77,12 +81,11 @@ if __name__ == '__main__':
     residual_pair_events = pair_events[train_samples_num:]
 
     ####################################################################################################################
-    init_time = time.time()
+
     with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, all_events)) as p:
         output = p.map(utils.generate_pos_samples, zip(residual_pairs, residual_pair_events))
     pos_samples = [value for sublist in output for value in sublist]
 
-    init_time = time.time()
     with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, all_events)) as p:
         output = p.map(utils.generate_neg_samples, np.random.uniform(size=(len(pos_samples),)).tolist())
     neg_samples = output
