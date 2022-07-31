@@ -71,7 +71,7 @@ if __name__ == '__main__':
     pairs, pair_events = shuffle(pairs, pair_events, random_state=seed)
     train_pairs = pairs[:train_samples_num]
     # Keep the number of nodes same
-    while len(np.unique(train_pairs))+1 != nodes_num:
+    while len(np.unique(train_pairs)) != nodes_num:
         pairs, pair_events = shuffle(pairs, pair_events, random_state=seed)
         train_pairs = pairs[:train_samples_num]
     train_pair_events = pair_events[:train_samples_num]
