@@ -205,26 +205,26 @@ class BaseModel(torch.nn.Module):
 
         return intensities
 
-    def get_log_intensity_sum(self, node_pairs: torch.Tensor, events_count: torch.Tensor,
-                              alpha1: torch.Tensor, alpha2: torch.Tensor):
+    def get_log_intensity_sum(self, delta_x0: torch.Tensor, delta_v: torch.Tensor, beta_ij: torch.Tensor,
+                              events_count: torch.Tensor, alpha1: torch.Tensor, alpha2: torch.Tensor):
 
         bin_bounds = self.get_bins_bounds()
 
-        x_tilde, v_tilde = self.get_x0(), self.get_v()
-
-        delta_x = torch.index_select(x_tilde, dim=0, index=node_pairs[0]) - \
-                  torch.index_select(x_tilde, dim=0, index=node_pairs[1])
-        delta_v = torch.index_select(v_tilde, dim=1, index=node_pairs[0]) - \
-                  torch.index_select(v_tilde, dim=1, index=node_pairs[1])
-        beta_ij = torch.index_select(self.__beta, 0, node_pairs[0]) + \
-                  torch.index_select(self.__beta, 0, node_pairs[1])
+        # x_tilde, v_tilde = self.get_x0(), self.get_v()
+        #
+        # delta_x = torch.index_select(x_tilde, dim=0, index=node_pairs[0]) - \
+        #           torch.index_select(x_tilde, dim=0, index=node_pairs[1])
+        # delta_v = torch.index_select(v_tilde, dim=1, index=node_pairs[0]) - \
+        #           torch.index_select(v_tilde, dim=1, index=node_pairs[1])
+        # beta_ij = torch.index_select(self.__beta, 0, node_pairs[0]) + \
+        #           torch.index_select(self.__beta, 0, node_pairs[1])
 
         # delta_xt is a tensor of size (bins_num x node_pairs) x dim
         delta_xt = self.get_xt(
-            events_times_list=torch.repeat_interleave(bin_bounds[:-1], node_pairs.shape[1], dim=0),
-            x0=delta_x.repeat(self.__bins_num, 1),
+            events_times_list=torch.repeat_interleave(bin_bounds[:-1], delta_x0.shape[0], dim=0),
+            x0=delta_x0.repeat(self.__bins_num, 1),
             v=delta_v.repeat(1, self.__bins_num, 1)
-        ).reshape(self.__bins_num, node_pairs.shape[1], self.__dim)
+        ).reshape(self.__bins_num, delta_x0.shape[0], self.__dim)
 
         delta_xt_sq_norm = torch.norm(delta_xt, p=2, dim=2, keepdim=False) ** 2
         delta_vt_sq_norm = torch.norm(delta_v, p=2, dim=2, keepdim=False) ** 2
@@ -237,35 +237,31 @@ class BaseModel(torch.nn.Module):
 
         return intensities
 
-    def get_intensity_integral(self, nodes: torch.Tensor, x0: torch.Tensor = None, v: torch.Tensor = None,
-                               beta: torch.Tensor = None, bin_bounds: torch.Tensor = None,
-                               distance: str = "squared_euc", sum_required: bool = True):
+    def get_intensity_integral(self, delta_x0: torch.Tensor, delta_v: torch.Tensor, beta_ij: torch.Tensor,
+                               bin_bounds: torch.Tensor = None, sum_required: bool = True):
 
-        if x0 is None or v is None:
-            x0, v = self.get_x0(), self.get_v()
-
+        # if x0 is None or v is None:
+        #     x0, v = self.get_x0(), self.get_v()
+        #
         if bin_bounds is None:
             bin_bounds = self.get_bins_bounds()
+        #
+        # if beta is None:
+        #     beta = self.get_beta()
 
-        if beta is None:
-            beta = self.get_beta()
+        # batch_size = len(nodes)
+        # unique_node_pairs = torch.as_tensor(
+        #     [[nodes[i], nodes[j]] for i in range(batch_size) for j in range(i+1, batch_size)],
+        #     dtype=torch.int, device=self.__device
+        # ).t()
 
-        batch_size = len(nodes)
-        unique_node_pairs = torch.as_tensor(
-            [[nodes[i], nodes[j]] for i in range(batch_size) for j in range(i+1, batch_size)],
-            dtype=torch.int, device=self.__device
-        ).t()
-
-        # Common variables
-        delta_x0 = torch.index_select(x0, dim=0, index=unique_node_pairs[0]) - \
-                   torch.index_select(x0, dim=0, index=unique_node_pairs[1])
-        delta_v = torch.index_select(v, dim=1, index=unique_node_pairs[0]) - \
-                  torch.index_select(v, dim=1, index=unique_node_pairs[1])
-        beta_ij = torch.index_select(beta, dim=0, index=unique_node_pairs[0]) + \
-                  torch.index_select(beta, dim=0, index=unique_node_pairs[1])
-
-        if distance != "squared_euc":
-            raise ValueError("Invalid distance metric!")
+        # # Common variables
+        # delta_x0 = torch.index_select(x0, dim=0, index=unique_node_pairs[0]) - \
+        #            torch.index_select(x0, dim=0, index=unique_node_pairs[1])
+        # delta_v = torch.index_select(v, dim=1, index=unique_node_pairs[0]) - \
+        #           torch.index_select(v, dim=1, index=unique_node_pairs[1])
+        # beta_ij = torch.index_select(beta, dim=0, index=unique_node_pairs[0]) + \
+        #           torch.index_select(beta, dim=0, index=unique_node_pairs[1])
 
         delta_xt = self.get_xt(
             events_times_list=torch.cat([bin_bounds[:-1]] * delta_x0.shape[0]),
@@ -274,7 +270,6 @@ class BaseModel(torch.nn.Module):
         ).reshape((delta_x0.shape[0], len(bin_bounds)-1,  self.__dim)).transpose(0, 1)
 
         norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
-        # norm_v: a matrix of bins_counts x len(node_pairs)
         norm_delta_v = torch.norm(delta_v, p=2, dim=2, keepdim=False) + utils.EPS
 
         inv_norm_delta_v = 1.0 / (norm_delta_v)
@@ -434,13 +429,24 @@ class BaseModel(torch.nn.Module):
         #
         #     raise ValueError("Invalid distance metric!")
 
-    def get_negative_log_likelihood(self, nodes: torch.Tensor, unique_node_pairs: torch.Tensor,
+    def get_negative_log_likelihood(self, all_pairs: torch.Tensor,
                                     events_count: torch.Tensor, alpha1: torch.Tensor, alpha2: torch.Tensor):
 
+        x0_, v_, beta_ = self.get_x0(), self.get_v(), self.get_beta()
+        delta_x0 = torch.index_select(x0_, dim=0, index=all_pairs[0]) - \
+                  torch.index_select(x0_, dim=0, index=all_pairs[1])
+        delta_v = torch.index_select(v_, dim=1, index=all_pairs[0]) - \
+                  torch.index_select(v_, dim=1, index=all_pairs[1])
+        beta_ij = torch.index_select(beta_, 0, all_pairs[0]) + \
+                  torch.index_select(beta_, 0, all_pairs[1])
+
         non_integral_term = self.get_log_intensity_sum(
-            node_pairs=unique_node_pairs, events_count=events_count, alpha1=alpha1, alpha2=alpha2
+            delta_x0=delta_x0, delta_v=delta_v, beta_ij=beta_ij,
+            events_count=events_count, alpha1=alpha1, alpha2=alpha2
         )
-        integral_term = -self.get_intensity_integral(nodes=nodes).sum()
+        integral_term = -self.get_intensity_integral(
+            delta_x0=delta_x0, delta_v=delta_v, beta_ij=beta_ij
+        ).sum()
 
         return -(non_integral_term + integral_term)
 

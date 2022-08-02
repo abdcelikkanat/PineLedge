@@ -262,7 +262,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         # Forward pass
         average_batch_loss = self.forward(
-            nodes=sampled_nodes, unique_node_pairs=batch_pairs,
+            nodes=sampled_nodes, all_pairs=batch_pairs,
             events_count=torch.as_tensor(
                 [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self.get_number_of_nodes()), torch.zeros(size=(self.get_bins_num(),), dtype=torch.int, device=self.get_device())).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.int
@@ -280,12 +280,12 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         return average_batch_loss
 
-    def forward(self, nodes: torch.Tensor, unique_node_pairs: torch.Tensor,
+    def forward(self, nodes: torch.Tensor, all_pairs: torch.Tensor,
                 events_count: torch.Tensor, alpha1: torch.Tensor, alpha2: torch.Tensor, batch_num: int):
 
         nll = 0
         if self.__approach == "nhpp":
-            nll = nll + self.get_negative_log_likelihood(nodes, unique_node_pairs, events_count, alpha1, alpha2)
+            nll = nll + self.get_negative_log_likelihood(all_pairs, events_count, alpha1, alpha2)
 
         elif self.__approach == "survival":
             pass #nll += self.get_survival_log_likelihood(nodes, event_times, event_node_pairs)
