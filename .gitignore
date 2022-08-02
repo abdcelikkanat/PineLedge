@@ -162,3 +162,6 @@ experiments/examine_datasets.py
 experiments/examine_sample_files.py
 experiments/construct_sample_weights.py
 experiments/testing*
+*.result
+datasets/synthetic/*
+samples

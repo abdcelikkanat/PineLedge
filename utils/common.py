@@ -1,9 +1,11 @@
+import os
+import math
+import random
 import torch
+import numpy as np
+from src.events import Events
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
-import numpy as np
-import math
-import os
 
 # Path definitions
 BASE_FOLDER = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
@@ -14,9 +16,25 @@ INF = 1e+6
 PI = math.pi
 LOG2PI = math.log(2*PI)
 
+
 def str2int(text):
 
     return int(sum(map(ord, text)) % 1e6)
+
+
+def set_seed(seed):
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+def load_dataset(dataset_folder, seed):
+    all_events = Events(seed=seed)
+    all_events.read(dataset_folder)
+    all_events.normalize(init_time=0, last_time=1.0)
+
+    return all_events
 
 
 def pair_iter(n, undirected=True):
@@ -44,41 +62,27 @@ def pairIdx2flatIdx(i, j, n, undirected=True):
         return i*n + j
 
 
-def remainder(x: torch.Tensor, y: float):
+def linearIdx2matIdx(idx, n, k):
 
-    remainders = torch.remainder(x, y)
-    remainders[torch.abs(remainders - y) < EPS] = 0
+    result = np.arange(k)
 
-    return remainders
+    num = 0
+    while num < idx:
 
+        col_idx = k-1
+        result[col_idx] += 1
+        while result[col_idx] == n+(col_idx-k+1) :
+            col_idx -= 1
+            result[col_idx] += 1
 
-def div(x: torch.Tensor, y: float, decimals=6):
+        if col_idx < k-1:
+            while col_idx < k-1:
+                result[col_idx+1] = result[col_idx] + 1
+                col_idx += 1
 
-    return torch.round(torch.div(torch.round(x, decimals=decimals), y, ), decimals=decimals).type(torch.int)
+        num += 1
 
-
-def vectorize(x: torch.Tensor):
-
-    return x.flatten(-2)
-
-
-def unvectorize(x: torch.Tensor, size):
-
-    return x.reshape((size[0], size[1], size[2]))
-
-
-def mean_normalization(x: torch.Tensor):
-
-    if x.dim() == 2:
-        return x - torch.mean(x, dim=0, keepdim=True)
-
-    elif x.dim() == 3:
-
-        return x - torch.mean(x, dim=1, keepdim=True)
-
-    else:
-
-        raise ValueError("Input of the tensor must be 2 or 3!")
+    return result.tolist()
 
 
 def plot_events(num_of_nodes, samples, labels, title=""):
@@ -114,25 +118,3 @@ def plot_events(num_of_nodes, samples, labels, title=""):
     plt.grid(axis='x')
     plt.title(title)
     plt.show()
-
-def linearIdx2matIdx(idx, n, k):
-
-    result = np.arange(k)
-
-    num = 0
-    while num < idx:
-
-        col_idx = k-1
-        result[col_idx] += 1
-        while result[col_idx] == n+(col_idx-k+1) :
-            col_idx -= 1
-            result[col_idx] += 1
-
-        if col_idx < k-1:
-            while col_idx < k-1:
-                result[col_idx+1] = result[col_idx] + 1
-                col_idx += 1
-
-        num += 1
-
-    return result.tolist()

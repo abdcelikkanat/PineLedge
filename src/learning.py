@@ -2,7 +2,6 @@ import sys
 import math
 import torch
 from src.base import BaseModel
-from torch_sparse import spspmm
 import time
 import utils
 
@@ -11,12 +10,11 @@ class LearningModel(BaseModel, torch.nn.Module):
 
     def __init__(self, data, nodes_num, bins_num, dim, last_time: float, approach="nhpp",
                  prior_k: int = 10, prior_lambda: float = 1.0,
-                 node_pairs_mask: torch.Tensor = None,
                  learning_rate: float = 0.1, batch_size: int = None, epoch_num: int = 100,
                  steps_per_epoch=10, device: torch.device = None, verbose: bool = False, seed: int = 0):
 
         super(LearningModel, self).__init__(
-            x0=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, dim), device=device) - 1, requires_grad=False),
+            x0=torch.nn.Parameter(2. * torch.rand(size=(nodes_num, dim), device=device) - 1., requires_grad=False),
             v=torch.nn.Parameter(torch.zeros(size=(bins_num, nodes_num, dim), device=device), requires_grad=False),
             beta=torch.nn.Parameter(2 * torch.rand(size=(nodes_num, ), device=device) - 1, requires_grad=False),
             bins_num=bins_num,
@@ -30,7 +28,6 @@ class LearningModel(BaseModel, torch.nn.Module):
                 (1 - (2.0 / bins_num)) * torch.rand(size=(1,), device=device) + (1./bins_num), requires_grad=False
             ),
             prior_C_Q=torch.nn.Parameter(torch.rand(size=(nodes_num, prior_k), device=device), requires_grad=False),
-            node_pairs_mask=node_pairs_mask,
             device=device,
             verbose=verbose,
             seed=seed
@@ -54,7 +51,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
         # Pre-computation of some coefficients
         self.__events_count, self.__alpha1, self.__alpha2 = self.__compute_coefficients(
-            self._nodes_num, self.__events_pairs, self.__events, self._bins_num
+            self.get_number_of_nodes(), self.__events_pairs, self.__events, self.get_bins_num()
         )
 
     def __compute_coefficients(self, nodes_num, events_pairs, events, bins_num):
@@ -83,7 +80,7 @@ class LearningModel(BaseModel, torch.nn.Module):
 
             # Get the bin indices
             bin_idx = utils.div(
-                torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.get_device()), self._bin_width
+                torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.get_device()), self.get_bin_width()
             )
             bin_idx[bin_idx == bins_num] = bins_num - 1
 
@@ -95,14 +92,14 @@ class LearningModel(BaseModel, torch.nn.Module):
                 dim=0, index=bin_idx,
                 source=utils.remainder(
                     torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.get_device()),
-                    self._bin_width
+                    self.get_bin_width()
                 )
             )
             alpha2[dictIdx].index_add_(
                 dim=0, index=bin_idx,
                 source=utils.remainder(
                     torch.as_tensor(events[pairIdx], dtype=torch.float, device=self.get_device()),
-                    self._bin_width) ** 2
+                    self.get_bin_width()) ** 2
             )
 
         if self.get_verbose():
@@ -304,13 +301,13 @@ class LearningModel(BaseModel, torch.nn.Module):
     def __set_gradients(self, beta_grad=None, x0_grad=None, v_grad=None, reg_params_grad=None):
 
         if beta_grad is not None:
-            self._beta.requires_grad = beta_grad
+            self.get_beta().requires_grad = beta_grad
 
         if x0_grad is not None:
-            self._x0.requires_grad = x0_grad
+            self.get_x0(standardize=False).requires_grad = x0_grad
 
         if v_grad is not None:
-            self._v.requires_grad = v_grad
+            self.get_v(standardize=False).requires_grad = v_grad
 
         if reg_params_grad is not None:
 
@@ -318,23 +315,6 @@ class LearningModel(BaseModel, torch.nn.Module):
             for name, param in self.named_parameters():
                 if '_prior' in name:
                     param.requires_grad = reg_params_grad
-
-    def get_hyperparameters(self):
-
-        params = dict()
-
-        params['_nodes_num'] = self.get_number_of_nodes()
-        params['_dim'] = self.get_dim()
-        params['_seed'] = self.get_seed()
-
-        for name, param in self.named_parameters():
-            # if param.requires_grad:
-            params[name.replace(self.__class__.__name__+'_', '')] = param
-
-        params['_prior_lambda'] = self.get_prior_lambda()
-        params['_prior_sigma'] = self.get_prior_sigma()
-
-        return params
 
     def save(self, path):
 
@@ -347,7 +327,6 @@ class LearningModel(BaseModel, torch.nn.Module):
             'nodes_num': self.get_number_of_nodes(), 'bins_num': self.get_bins_num(), 'dim': self.get_dim(),
             'last_time': self.get_last_time(), 'approach': self.__approach,
             'prior_k': self.get_prior_k(), 'prior_lambda': self.get_prior_lambda(),
-            'node_pairs_mask': self.get_node_pair_mask(),
             'learning_rate': self.__learning_rate, 'batch_size': self.__batch_size, 'epoch_num': self.__epoch_num,
             'steps_per_epoch': self.__steps_per_epoch,
             'device': self.get_device(), 'verbose': self.get_verbose(), 'seed': self.get_seed(),
