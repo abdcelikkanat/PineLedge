@@ -11,7 +11,7 @@ class LearningModel(BaseModel, torch.nn.Module):
     def __init__(self, data, nodes_num, bins_num, dim, last_time: float, approach="nhpp",
                  prior_k: int = 10, prior_lambda: float = 1.0,
                  learning_rate: float = 0.1, batch_size: int = None, epoch_num: int = 100,
-                 steps_per_epoch=10, device: torch.device = None, verbose: bool = False, seed: int = 0):
+                 steps_per_epoch=10, device: torch.device = None, verbose: bool = False, seed: int = 19):
 
         super(LearningModel, self).__init__(
             x0=torch.nn.Parameter(2. * torch.rand(size=(nodes_num, dim), device=device) - 1., requires_grad=False),
@@ -264,15 +264,24 @@ class LearningModel(BaseModel, torch.nn.Module):
         average_batch_loss = self.forward(
             nodes=sampled_nodes, all_pairs=batch_pairs,
             events_count=torch.as_tensor(
-                [self.__events_count.get(utils.pairIdx2flatIdx(pair[0], pair[1], self.get_number_of_nodes()), torch.zeros(size=(self.get_bins_num(),), dtype=torch.int, device=self.get_device())).tolist() for pair in batch_pairs.T.tolist()],
+                [self.__events_count.get(
+                    utils.pairIdx2flatIdx(pair[0], pair[1], self.get_number_of_nodes()),
+                    torch.zeros(size=(self.get_bins_num(), ), dtype=torch.int, device=self.get_device())
+                ).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.int
             ),
             alpha1=torch.as_tensor(
-                [self.__alpha1.get(utils.pairIdx2flatIdx(pair[0], pair[1], self.get_number_of_nodes()), torch.zeros(size=(self.get_bins_num(),), dtype=torch.float, device=self.get_device())).tolist() for pair in batch_pairs.T.tolist()],
+                [self.__alpha1.get(
+                    utils.pairIdx2flatIdx(pair[0], pair[1], self.get_number_of_nodes()),
+                    torch.zeros(size=(self.get_bins_num(),), dtype=torch.float, device=self.get_device())
+                ).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.float
             ),
             alpha2=torch.as_tensor(
-                [self.__alpha2.get(utils.pairIdx2flatIdx(pair[0], pair[1], self.get_number_of_nodes()), torch.zeros(size=(self.get_bins_num(),), dtype=torch.float, device=self.get_device())).tolist() for pair in batch_pairs.T.tolist()],
+                [self.__alpha2.get(
+                    utils.pairIdx2flatIdx(pair[0], pair[1], self.get_number_of_nodes()),
+                    torch.zeros(size=(self.get_bins_num(),), dtype=torch.float, device=self.get_device())
+                ).tolist() for pair in batch_pairs.T.tolist()],
                 dtype=torch.float
             ),
             batch_num=batch_num

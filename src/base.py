@@ -153,71 +153,66 @@ class BaseModel(torch.nn.Module):
             torch.cumsum(v * self.__bin_width, dim=0)
         )).view(-1, self.__dim)
 
-        xt = x0 + torch.index_select(cum_displacement, dim=0, index=events_bin_indices * v.shape[1] + torch.arange(len(events_bin_indices)))
+        xt = x0 + torch.index_select(
+            cum_displacement, dim=0, index=events_bin_indices * v.shape[1] + torch.arange(len(events_bin_indices))
+        )
         # Finally, add the the displacement on the interval that nodes lay on
         xt = xt + torch.mul(
             residual_time.unsqueeze(1),
-            torch.index_select(v.view(-1, self.__dim), dim=0, index=events_bin_indices * v.shape[1] + torch.arange(len(events_bin_indices)))
+            torch.index_select(
+                v.view(-1, self.__dim), dim=0, index=events_bin_indices * v.shape[1] + torch.arange(len(events_bin_indices))
+            )
         )
 
         return xt
 
-    def get_pairwise_distances(self, times_list: torch.Tensor, node_pairs: torch.Tensor = None,
-                               distance: str = "squared_euc"):
+    # def get_pairwise_distances(self, times_list: torch.Tensor, node_pairs: torch.Tensor = None,
+    #                            distance: str = "squared_euc"):
+    #
+    #     if node_pairs is None:
+    #         raise NotImplementedError("It should be implemented for every node pairs!")
+    #
+    #     if distance != "squared_euc":
+    #         raise ValueError("Invalid distance metric!")
+    #
+    #     x_tilde, v_tilde = self.get_x0(), self.get_v()
+    #
+    #     delta_x0 = torch.index_select(x_tilde, dim=0, index=node_pairs[0]) - \
+    #                torch.index_select(x_tilde, dim=0, index=node_pairs[1])
+    #     delta_v = torch.index_select(v_tilde, dim=1, index=node_pairs[0]) - \
+    #               torch.index_select(v_tilde, dim=1, index=node_pairs[1])
+    #
+    #     # delta_xt is a tensor of size len(times_list) x dim
+    #     delta_xt = self.get_xt(events_times_list=times_list, x0=delta_x0, v=delta_v)
+    #     # Compute the squared Euclidean distance
+    #     norm = torch.norm(delta_xt, p=2, dim=1, keepdim=False) ** 2
+    #
+    #     return norm
 
-        if node_pairs is None:
-            raise NotImplementedError("It should be implemented for every node pairs!")
-
-        if distance != "squared_euc":
-            raise ValueError("Invalid distance metric!")
-
-        x_tilde, v_tilde = self.get_x0(), self.get_v()
-
-        delta_x0 = torch.index_select(x_tilde, dim=0, index=node_pairs[0]) - \
-                   torch.index_select(x_tilde, dim=0, index=node_pairs[1])
-        delta_v = torch.index_select(v_tilde, dim=1, index=node_pairs[0]) - \
-                  torch.index_select(v_tilde, dim=1, index=node_pairs[1])
-
-        # delta_xt is a tensor of size len(times_list) x dim
-        delta_xt = self.get_xt(events_times_list=times_list, x0=delta_x0, v=delta_v)
-        # Compute the squared Euclidean distance
-        norm = torch.norm(delta_xt, p=2, dim=1, keepdim=False) ** 2
-
-        return norm
-
-    def get_intensity(self, times_list: torch.tensor, node_pairs: torch.tensor, distance: str = "squared_euc"):
-
-        return torch.exp(self.get_log_intensity(times_list, node_pairs, distance))
-
-    def get_log_intensity(self, times_list: torch.Tensor, node_pairs: torch.Tensor, distance: str = "squared_euc"):
-
-        # Mask given node pairs
-        if self.__node_pairs_mask is not None:
-            non_idx = torch.cdist(node_pairs.T.float(), self.__node_pairs_mask.T.float()).nonzero(as_tuple=True)[0]
-            idx = torch.unique(non_idx, sorted=True)
-            node_pairs = node_pairs[:, idx]
-
-        # Get pairwise distances
-        intensities = -self.get_pairwise_distances(times_list=times_list, node_pairs=node_pairs, distance=distance)
-        # Add an additional axis for beta parameters for time dimension
-        intensities += torch.index_select(self._beta, dim=0, index=node_pairs[0]) + \
-                       torch.index_select(self._beta, dim=0, index=node_pairs[1])
-
-        return intensities
+    # def get_intensity(self, times_list: torch.tensor, node_pairs: torch.tensor, distance: str = "squared_euc"):
+    #
+    #     return torch.exp(self.get_log_intensity(times_list, node_pairs, distance))
+    #
+    # def get_log_intensity(self, times_list: torch.Tensor, node_pairs: torch.Tensor, distance: str = "squared_euc"):
+    #
+    #     # Mask given node pairs
+    #     if self.__node_pairs_mask is not None:
+    #         non_idx = torch.cdist(node_pairs.T.float(), self.__node_pairs_mask.T.float()).nonzero(as_tuple=True)[0]
+    #         idx = torch.unique(non_idx, sorted=True)
+    #         node_pairs = node_pairs[:, idx]
+    #
+    #     # Get pairwise distances
+    #     intensities = -self.get_pairwise_distances(times_list=times_list, node_pairs=node_pairs, distance=distance)
+    #     # Add an additional axis for beta parameters for time dimension
+    #     intensities += torch.index_select(self._beta, dim=0, index=node_pairs[0]) + \
+    #                    torch.index_select(self._beta, dim=0, index=node_pairs[1])
+    #
+    #     return intensities
 
     def get_log_intensity_sum(self, delta_x0: torch.Tensor, delta_v: torch.Tensor, beta_ij: torch.Tensor,
                               events_count: torch.Tensor, alpha1: torch.Tensor, alpha2: torch.Tensor):
 
         bin_bounds = self.get_bins_bounds()
-
-        # x_tilde, v_tilde = self.get_x0(), self.get_v()
-        #
-        # delta_x = torch.index_select(x_tilde, dim=0, index=node_pairs[0]) - \
-        #           torch.index_select(x_tilde, dim=0, index=node_pairs[1])
-        # delta_v = torch.index_select(v_tilde, dim=1, index=node_pairs[0]) - \
-        #           torch.index_select(v_tilde, dim=1, index=node_pairs[1])
-        # beta_ij = torch.index_select(self.__beta, 0, node_pairs[0]) + \
-        #           torch.index_select(self.__beta, 0, node_pairs[1])
 
         # delta_xt is a tensor of size (bins_num x node_pairs) x dim
         delta_xt = self.get_xt(
@@ -240,28 +235,8 @@ class BaseModel(torch.nn.Module):
     def get_intensity_integral(self, delta_x0: torch.Tensor, delta_v: torch.Tensor, beta_ij: torch.Tensor,
                                bin_bounds: torch.Tensor = None, sum_required: bool = True):
 
-        # if x0 is None or v is None:
-        #     x0, v = self.get_x0(), self.get_v()
-        #
         if bin_bounds is None:
             bin_bounds = self.get_bins_bounds()
-        #
-        # if beta is None:
-        #     beta = self.get_beta()
-
-        # batch_size = len(nodes)
-        # unique_node_pairs = torch.as_tensor(
-        #     [[nodes[i], nodes[j]] for i in range(batch_size) for j in range(i+1, batch_size)],
-        #     dtype=torch.int, device=self.__device
-        # ).t()
-
-        # # Common variables
-        # delta_x0 = torch.index_select(x0, dim=0, index=unique_node_pairs[0]) - \
-        #            torch.index_select(x0, dim=0, index=unique_node_pairs[1])
-        # delta_v = torch.index_select(v, dim=1, index=unique_node_pairs[0]) - \
-        #           torch.index_select(v, dim=1, index=unique_node_pairs[1])
-        # beta_ij = torch.index_select(beta, dim=0, index=unique_node_pairs[0]) + \
-        #           torch.index_select(beta, dim=0, index=unique_node_pairs[1])
 
         delta_xt = self.get_xt(
             events_times_list=torch.cat([bin_bounds[:-1]] * delta_x0.shape[0]),
@@ -493,7 +468,6 @@ class BaseModel(torch.nn.Module):
         # B x B lower triangular matrix
         L = torch.linalg.cholesky(kernel)  # L, _ = torch.linalg.cholesky_ex(kernel)
 
-
         return L
 
     @staticmethod
@@ -532,7 +506,7 @@ class BaseModel(torch.nn.Module):
 
         # Some common parameters
         lambda_sq = self.__prior_lambda ** 2
-        sigma_sq = torch.clamp(self.__prior_sigma, min=5./(self.__bins_num)) ** 2
+        sigma_sq = torch.clamp(self.__prior_sigma, min=5./self.__bins_num) ** 2
         sigma_sq_inv = 1.0 / sigma_sq
         final_dim = self.get_number_of_nodes() * (self.__bins_num+1) * self.__dim
         reduced_dim = self.__prior_C_Q.shape[1] * (self.__bins_num+1) * self.__dim
@@ -541,7 +515,9 @@ class BaseModel(torch.nn.Module):
         if batch_num == 0:
             #K_factor_full = torch.kron(B_factor.contiguous(), torch.kron(C_factor.contiguous(), D_factor).contiguous())
             #self.__R = torch.eye(reduced_dim) + sigma_sq_inv * K_factor_full.T @ K_factor_full
-            self.__R = torch.eye(reduced_dim) + sigma_sq_inv * torch.kron(B_factor.T @ B_factor, torch.kron(C_factor.T @ C_factor, D_factor.T @ D_factor))
+            self.__R = torch.eye(reduced_dim) + sigma_sq_inv * torch.kron(
+                B_factor.T @ B_factor, torch.kron(C_factor.T @ C_factor, D_factor.T @ D_factor)
+            )
             self.__R_factor = torch.linalg.cholesky(self.__R)
             self.__R_factor_inv = torch.inverse(self.__R)
 
