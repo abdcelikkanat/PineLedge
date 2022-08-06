@@ -9,6 +9,13 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from multiprocessing import Pool
 import time
 
+
+def generate_numbers(id):
+
+    for _ in range(4):
+        nums = np.random.randint(low=0, high=100, size=(10, )).tolist()
+        print(id, nums)
+
 ########################################################################################################################
 
 r = None
@@ -98,6 +105,8 @@ if __name__ == '__main__':
             second_part_pairs.pop()
             second_part_events.pop()
 
+    assert len(np.unique(first_part_pairs)) == nodes_num, "In the first set, there are less number of nodes!"
+
     with open(info_path, 'w') as f:
         f.write("+ Residual network has less number of events than the original network.\n")
         f.write("\t- All pairs having at least one event: {}\n".format(all_events.number_of_event_pairs()))
@@ -126,7 +135,7 @@ if __name__ == '__main__':
     test_valid_events = pair_events[train_samples_num:]
 
     with open(info_path, 'a+') as f:
-        f.write("+ The first set contains {} pairs.\n".format(len(first_part_pairs)))
+        f.write("+ Validation and testing set generation from the first set.\n")
         f.write("\t- The number of pairs in the training set: {}\n".format(len(train_pairs)))
         f.write("\t- The number of pairs in the valid + test set: {}\n".format(len(test_valid_pairs)))
 
@@ -135,7 +144,7 @@ if __name__ == '__main__':
     # Remove the valid/test pairs existing in the prediction
     # The prediction set must not contain the event pair
     with open(info_path, 'a+') as f:
-        f.write("+ The second set contains {} pairs.\n".format(len(second_part_pairs)))
+        f.write("+ Removing extra pairs in the second set.\n".format(len(second_part_pairs)))
     # print(pred_test_pairs)
     for pair in test_valid_pairs:
 
@@ -206,11 +215,14 @@ if __name__ == '__main__':
         pickle.dump(neg_samples[l:], f, protocol=pickle.HIGHEST_PROTOCOL)
 
     # For prediction
+    prediction_folder_path = os.path.join(output_folder, "prediction")
+    if not os.path.exists(prediction_folder_path):
+        os.makedirs(prediction_folder_path)
 
-    pred_pairs_file_path = os.path.join(output_folder, "prediction", "pairs.pkl")
+    pred_pairs_file_path = os.path.join(prediction_folder_path, "pairs.pkl")
     with open(pred_pairs_file_path, 'wb') as f:
         pickle.dump(second_part_pairs, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    pred_events_file_path = os.path.join(output_folder, "prediction", "events.pkl")
+    pred_events_file_path = os.path.join(prediction_folder_path, "events.pkl")
     with open(pred_events_file_path, 'wb') as f:
         pickle.dump(second_part_events, f, protocol=pickle.HIGHEST_PROTOCOL)
