@@ -24,6 +24,9 @@ def parse_arguments():
         '--model_path', type=str, required=True, help='Path of the model'
     )
     parser.add_argument(
+        '--init_path', type=str, required=False, default="", help='A model path for the initialization'
+    )
+    parser.add_argument(
         '--log', type=str, required=False, default=None, help='Path of the log file'
     )
     parser.add_argument(
@@ -64,6 +67,7 @@ def process(args):
 
     dataset_path = args.dataset
     model_path = args.model_path
+    init_path = args.init_path
     log_file_path = args.log
 
     bins_num = args.bins_num
@@ -101,13 +105,23 @@ def process(args):
     if verbose:
         print(f"- The active device is {device}.")
 
-    # Run the model
-    lm = LearningModel(
-        data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1., batch_size=batch_size,
-        prior_k=K, prior_lambda=prior_lambda,
-        learning_rate=learning_rate, epoch_num=epoch_num, steps_per_epoch=steps_per_epoch,
-        verbose=verbose, seed=seed, device=torch.device(device)
-    )
+    # Run/set the model
+    if init_path == "":
+
+        lm = LearningModel(
+            data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1., batch_size=batch_size,
+            prior_k=K, prior_lambda=prior_lambda,
+            learning_rate=learning_rate, epoch_num=epoch_num, steps_per_epoch=steps_per_epoch,
+            verbose=verbose, seed=seed, device=torch.device(device)
+        )
+
+    else:
+
+        kwargs, lm_state = torch.load(model_path, map_location=torch.device(device))
+        lm = LearningModel(**kwargs)
+        lm.load_state_dict(lm_state)
+
+    # Learn the embeddings
     lm.learn(loss_file_path=log_file_path)
 
     # Save the model
