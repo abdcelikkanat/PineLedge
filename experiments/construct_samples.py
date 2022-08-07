@@ -9,13 +9,6 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from multiprocessing import Pool
 import time
 
-
-def generate_numbers(id):
-
-    for _ in range(4):
-        nums = np.random.randint(low=0, high=100, size=(10, )).tolist()
-        print(id, nums)
-
 ########################################################################################################################
 
 r = None
@@ -60,6 +53,7 @@ seed = args.seed
 utils.set_seed(seed=seed)
 info_path = os.path.join(output_folder, "info.txt")
 
+
 if __name__ == '__main__':
 
     ####################################################################################################################
@@ -69,29 +63,34 @@ if __name__ == '__main__':
 
     ####################################################################################################################
     # Load the dataset
-    all_events = utils.load_dataset(dataset_folder, seed=seed)
-    nodes_num = all_events.number_of_nodes()
+    events = utils.load_dataset(dataset_folder, seed=seed)
 
-    pairs = np.asarray(all_events.get_pairs(), dtype=int)
-    pair_events = np.asarray(all_events.get_events())
+    pairs = np.asarray(events.get_pairs(), dtype=int)
+    pair_events = np.asarray(events.get_events())
+
+    with open(info_path, 'w') as f:
+        f.write("+ The given network statistics.\n")
+        f.write(f"\t It contains {events.number_of_nodes()} nodes.\n")
+        f.write(f"\t It contains {events.number_of_event_pairs()} pairs having at least one link.\n")
+        f.write(f"\t It contains {events.number_of_total_events()} links in total.\n")
 
     ####################################################################################################################
 
     # Split the dataset
-    all_event_times = [e for pair_events in all_events.get_events() for e in pair_events]
+    all_event_times = [e for pair_events in events.get_events() for e in pair_events]
     all_event_times.sort()
-    split_time = all_event_times[math.floor(all_events.number_of_total_events() * split_ratio)]
+    split_time = split_ratio  #all_event_times[math.floor(all_events.number_of_total_events() * split_ratio)]
 
     first_part_pairs, first_part_events = [], []
     second_part_pairs, second_part_events = [], []
-    for pair in all_events.get_pairs():
+    for pair in events.get_pairs():
 
         first_part_pairs.append(pair)
         first_part_events.append([])
         second_part_pairs.append(pair)
         second_part_events.append([])
 
-        for e in all_events[pair][1]:
+        for e in events[pair][1]:
             if e < split_time:
                 first_part_events[-1].append(e)
             else:
@@ -105,14 +104,35 @@ if __name__ == '__main__':
             second_part_pairs.pop()
             second_part_events.pop()
 
-    assert len(np.unique(first_part_pairs)) == nodes_num, "In the first set, there are less number of nodes!"
+    if len(np.unique(pairs)) != len(np.unique(first_part_pairs)):
+        with open(info_path, 'a+') as f:
+            f.write("+ The first set contains less number of nodes than the original network.\n")
+            f.write(f"\t- The first set has {len(np.unique(first_part_pairs))} nodes.\n")
+            f.write(f"\t- The first set has {len(first_part_pairs)} event pairs.\n")
+            f.write(f"\t- The second set has {len(np.unique(second_part_pairs))} nodes.\n")
+            f.write(f"\t- The second set has {len(second_part_pairs)} event pairs.\n")
 
-    with open(info_path, 'w') as f:
-        f.write("+ Residual network has less number of events than the original network.\n")
-        f.write("\t- All pairs having at least one event: {}\n".format(all_events.number_of_event_pairs()))
-        f.write("\t- Pairs having at least one event in the first set: {}\n".format(len(first_part_pairs)))
-        f.write("\t- Pairs having at least one event in the second set: {}\n".format(len(second_part_events)))
+        selected_nodes = np.unique(first_part_pairs)
+        node2newlabel = dict(zip(selected_nodes, range(len(selected_nodes))))
 
+        # Relabel the nodes and remove the nodes in the second set which do not appear in the first set
+        idx = 0
+        while idx < len(first_part_pairs):
+            pair = first_part_pairs[idx]
+            first_part_pairs[idx][0], first_part_pairs[idx][1] = node2newlabel[pair[0]], node2newlabel[pair[1]]
+            idx += 1
+        idx = 0
+        while idx < len(second_part_pairs):
+
+            if second_part_pairs[idx][0] not in selected_nodes or second_part_pairs[idx][1] not in selected_nodes:
+                second_part_pairs.pop(idx)
+                second_part_events.pop(idx)
+
+            else:
+                pair = second_part_pairs[idx]
+                second_part_pairs[idx][0], second_part_pairs[idx][1] = node2newlabel[pair[0]], node2newlabel[pair[1]]
+                idx += 1
+    nodes_num = len(np.unique(first_part_pairs))
     ####################################################################################################################
 
     # Compute the number of training/testing/validation samples
@@ -129,13 +149,12 @@ if __name__ == '__main__':
         first_part_pairs, first_part_events = shuffle(first_part_pairs, first_part_events, random_state=seed)
         train_pairs = first_part_pairs[:train_samples_num]
     train_events = first_part_events[:train_samples_num]
-
     # Residual samples
-    test_valid_pairs = pairs[train_samples_num:]
-    test_valid_events = pair_events[train_samples_num:]
+    test_valid_pairs = first_part_pairs[train_samples_num:]
+    test_valid_events = first_part_events[train_samples_num:]
 
     with open(info_path, 'a+') as f:
-        f.write("+ Validation and testing set generation from the first set.\n")
+        f.write(f"+ Validation and testing set generation from the first set. {event_pairs_num}\n")
         f.write("\t- The number of pairs in the training set: {}\n".format(len(train_pairs)))
         f.write("\t- The number of pairs in the valid + test set: {}\n".format(len(test_valid_pairs)))
 
@@ -166,13 +185,21 @@ if __name__ == '__main__':
     residual_events = Events(data=(first_part_events, first_part_pairs, range(nodes_num)))
     # Generate samples for the testing set
     with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, residual_events)) as p:
-        output = p.map(utils.generate_pos_samples, zip(first_part_pairs, first_part_events))
+        output = p.starmap(
+            utils.generate_pos_samples,
+            zip(
+                np.random.randint(0, 1e4, size=(len(first_part_pairs), )),
+                first_part_pairs,
+                first_part_events
+            )
+        )
     pos_samples = [value for sublist in output for value in sublist]
 
     with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, residual_events)) as p:
         output = p.starmap(
             utils.generate_neg_samples,
             zip(
+                np.random.randint(0, 1e4, size=(len(pos_samples),)),
                 np.random.uniform(low=0.0, high=split_time, size=(len(pos_samples),)).tolist(),
                 [0.] * len(pos_samples), [split_time] * len(pos_samples)
             )
@@ -180,7 +207,7 @@ if __name__ == '__main__':
     neg_samples = output
 
     with open(info_path, 'a+') as f:
-        f.write(f"+ Total number of events in the first set: {len(first_part_pairs)}\n")
+        f.write(f"+ Total number of events in the first set: {sum([len(l) for l in first_part_events])}\n")
         f.write(f"\t- Positive samples in the first set: {len(pos_samples)}\n")
         f.write(f"\t- Negative samples in the first set: {len(neg_samples)}\n")
 

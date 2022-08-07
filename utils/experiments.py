@@ -1,5 +1,5 @@
 import numpy as np
-from utils.common import linearIdx2matIdx
+from utils.common import linearIdx2matIdx, set_seed
 
 
 def init_worker(param_r, param_nodes_num, param_all_events):
@@ -10,17 +10,18 @@ def init_worker(param_r, param_nodes_num, param_all_events):
     all_events = param_all_events
 
 
-def generate_pos_samples(x):
+def generate_pos_samples(seed, event_pair, events):
     global r
-    event_pair, events = x
+    set_seed(seed)
 
-    pos_samples = [[event_pair[0], event_pair[1], max(0, e - r), min(1, e + r)] for e in events]
+    pos_samples = [[event_pair, event_pair, max(0, e - r), min(1, e + r)] for e in events]
 
     return pos_samples
 
 
-def generate_neg_samples(e, low=0.0, high=1.0):
+def generate_neg_samples(seed, e, low=0.0, high=1.0):
     global r, nodes_num, all_events
+    set_seed(seed)
 
     valid_sample = False
     while not valid_sample:
