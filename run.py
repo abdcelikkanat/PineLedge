@@ -117,7 +117,7 @@ def process(args):
 
     else:
 
-        kwargs, lm_state = torch.load(model_path, map_location=torch.device(device))
+        kwargs, lm_state = torch.load(init_path, map_location=torch.device(device))
         lm = LearningModel(**kwargs)
         lm.load_state_dict(lm_state)
 
