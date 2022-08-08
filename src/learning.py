@@ -23,7 +23,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             prior_sigma=torch.nn.Parameter(
                 (2.0 / bins_num) * torch.rand(size=(1,), device=device) + (1./bins_num), requires_grad=False
             ),
-            prior_B_x0_c=torch.nn.Parameter(torch.ones(size=(1, 1), device=device), requires_grad=False),
+            prior_B_x0_c_sq=torch.nn.Parameter(torch.ones(size=(1, 1), device=device), requires_grad=False),
             prior_B_sigma=torch.nn.Parameter(
                 (1 - (2.0 / bins_num)) * torch.rand(size=(1,), device=device) + (1./bins_num), requires_grad=False
             ),
@@ -50,11 +50,11 @@ class LearningModel(BaseModel, torch.nn.Module):
         self.__loss = []
 
         # Pre-computation of some coefficients
-        self.__events_count, self.__alpha1, self.__alpha2 = self.__compute_coefficients(
+        self.__events_count, self.__alpha1, self.__alpha2 = self.compute_coefficients(
             self.get_number_of_nodes(), self.__events_pairs, self.__events, self.get_bins_num()
         )
 
-    def __compute_coefficients(self, nodes_num, events_pairs, events, bins_num):
+    def compute_coefficients(self, nodes_num, events_pairs, events, bins_num):
 
         if self.get_verbose():
             print(f"- The pre-computation of the coefficients has started.")

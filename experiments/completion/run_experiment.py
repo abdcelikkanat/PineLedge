@@ -10,9 +10,6 @@ from src.learning import LearningModel
 ########################################################################################################################
 parser = ArgumentParser(description="Examples: \n", formatter_class=RawTextHelpFormatter)
 parser.add_argument(
-    '--dataset_folder', type=str, required=True, help='Path of the dataset folder'
-)
-parser.add_argument(
     '--samples_folder', type=str, required=True, help='Path of the samples folder'
 )
 parser.add_argument(
@@ -30,7 +27,6 @@ args = parser.parse_args()
 
 seed = 19
 # Set some parameters
-dataset_folder = args.dataset_folder
 samples_folder = args.samples_folder
 samples_set = args.samples_set
 model_path = args.model_path
@@ -45,16 +41,6 @@ kwargs['device'] = 'cpu'
 lm = LearningModel(**kwargs)
 lm.load_state_dict(lm_state)
 print("\t+ Completed.")
-
-########################################################################################################################
-
-# # Load the dataset
-# all_events = Events(seed=seed)
-# all_events.read(dataset_folder)
-# # Normalize the events
-# all_events.normalize(init_time=0, last_time=1.0)
-# # Get the number of nodes
-# nodes_num = all_events.number_of_nodes()
 
 ########################################################################################################################
 
@@ -90,12 +76,16 @@ for samples in neg_samples:
         lm.get_intensity_integral_for(i=i, j=j, interval=torch.as_tensor([t_init, t_last])).detach().numpy()
     )
 
-
 with open(output_path, 'w') as f:
     roc_auc_complete = roc_auc_score(y_true=y_true, y_score=y_pred)
     f.write(f"Roc_AUC: {roc_auc_complete}\n")
     pr_auc_complete = average_precision_score(y_true=y_true, y_score=y_pred)
     f.write(f"PR_AUC: {pr_auc_complete}\n")
+    events_count, alpha1, alpha2 = lm.compute_coefficients(
+        kwargs["nodes_num"], kwargs["data"][0], kwargs["data"][1], kwargs["bins_num"]
+    )
+    nll = lm.get_negative_log_likelihood(events_count, alpha1, alpha2)
+    f.write(f"NLL: {nll}\n")
 
 
 print("\t+ Roc_AUC: {}".format(roc_auc_complete))

@@ -14,7 +14,7 @@ def generate_pos_samples(seed, event_pair, events):
     global r
     set_seed(seed)
 
-    pos_samples = [[event_pair, event_pair, max(0, e - r), min(1, e + r)] for e in events]
+    pos_samples = [[event_pair[0], event_pair[1], max(0, e - r), min(1, e + r)] for e in events]
 
     return pos_samples
 

@@ -10,8 +10,8 @@ class BaseModel(torch.nn.Module):
     '''
     def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, bins_num: int = 100,
                  last_time: float = 1.0, prior_lambda: float = 1e5, prior_sigma: torch.Tensor = None,
-                 prior_B_x0_c: torch.Tensor = None, prior_B_sigma: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
-                 device: torch.device = "cpu", verbose: bool = False, seed: int = 0):
+                 prior_B_x0_c_sq: torch.Tensor = None, prior_B_sigma: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
+                 device: torch.device = "cpu", verbose: bool = False, seed: int = 0, **kwargs):
 
         super(BaseModel, self).__init__()
 
@@ -40,8 +40,8 @@ class BaseModel(torch.nn.Module):
         # length-scale parameter of RBF kernel used in the construction of B
         if prior_B_sigma is not None:
             self.__prior_B_sigma = torch.as_tensor(prior_B_sigma, dtype=torch.float, device=self.__device)
-        if prior_B_x0_c is not None:
-            self.__prior_B_x0_c_sq = torch.as_tensor(prior_B_x0_c**2, dtype=torch.float, device=self.__device)
+        if prior_B_x0_c_sq is not None:
+            self.__prior_B_x0_c_sq = torch.as_tensor(prior_B_x0_c_sq, dtype=torch.float, device=self.__device)
             if self.__prior_B_x0_c_sq.dim == 1:
                 self.__prior_B_x0_c_sq.unsquueze(0)
         if prior_C_Q is not None:
@@ -118,6 +118,18 @@ class BaseModel(torch.nn.Module):
     def get_prior_sigma(self):
 
         return self.__prior_sigma
+
+    def get_prior_B_sigma(self):
+
+        return self.__prior_B_sigma
+
+    def get_prior_B_x0_c_sq(self):
+
+        return self.__prior_B_x0_c_sq
+
+    def get_prior_C_Q(self):
+
+        return self.__prior_C_Q
 
     def get_prior_lambda(self):
 
@@ -486,17 +498,17 @@ class BaseModel(torch.nn.Module):
         bounds = self.get_bins_bounds()
 
         # Get the middle time points of the bins for TxT covariance matrix
-        middle_bounds = ((bounds[1:] + bounds[:-1]) / 2.).view(1, self.__bins_num)
+        middle_bounds = ((bounds[1:] + bounds[:-1]) / 2.).view(1, self.get_bins_num())
 
         # B x B matrix
         B_factor = self.get_B_factor(
             bin_centers1=middle_bounds, bin_centers2=middle_bounds,
-            prior_B_x0_c_sq=self.__prior_B_x0_c_sq, prior_B_sigma=self.__prior_B_sigma
+            prior_B_x0_c_sq=self.get_prior_B_x0_c_sq(), prior_B_sigma=self.get_prior_B_sigma()
         )
         # N x K matrix where K is the community size
-        C_factor = self.get_C_factor(prior_C_Q=self.__prior_C_Q)
+        C_factor = self.get_C_factor(prior_C_Q=self.get_prior_C_Q())
         # D x D matrix
-        D_factor = self.get_D_factor(dim=self.__dim)
+        D_factor = self.get_D_factor(dim=self.get_dim())
 
         # B(batch_size)D x BKD matrix
         K_factor_batch = torch.kron(
@@ -505,11 +517,11 @@ class BaseModel(torch.nn.Module):
         )
 
         # Some common parameters
-        lambda_sq = self.__prior_lambda ** 2
-        sigma_sq = torch.clamp(self.__prior_sigma, min=5./self.__bins_num) ** 2
+        lambda_sq = self.get_prior_lambda() ** 2
+        sigma_sq = torch.clamp(self.get_prior_sigma(), min=5. / self.get_bins_num()) ** 2
         sigma_sq_inv = 1.0 / sigma_sq
-        final_dim = self.get_number_of_nodes() * (self.__bins_num+1) * self.__dim
-        reduced_dim = self.__prior_C_Q.shape[1] * (self.__bins_num+1) * self.__dim
+        final_dim = self.get_number_of_nodes() * (self.get_bins_num()+1) * self.get_dim()
+        reduced_dim = self.get_prior_k() * (self.get_bins_num()+1) * self.get_dim()
 
         # Compute the capacitance matrix R only if batch_num == 0
         if batch_num == 0:
@@ -519,7 +531,7 @@ class BaseModel(torch.nn.Module):
                 B_factor.T @ B_factor, torch.kron(C_factor.T @ C_factor, D_factor.T @ D_factor)
             )
             self.__R_factor = torch.linalg.cholesky(self.__R)
-            self.__R_factor_inv = torch.inverse(self.__R)
+            self.__R_factor_inv = torch.inverse(self.__R_factor)
 
         # Normalize and vectorize the velocities
         v_batch = utils.vectorize(torch.index_select(self.get_v(),  dim=1, index=batch_nodes)).flatten()
