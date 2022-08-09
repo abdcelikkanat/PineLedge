@@ -7,7 +7,7 @@ class PredictionModel(BaseModel, torch.nn.Module):
 
     def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, bins_num: int = 100,
                  last_time: float = 1.0, prior_lambda: float = 1e5, prior_sigma: torch.Tensor = None,
-                 prior_B_x0_c_sq: torch.Tensor = None, prior_B_sigma: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
+                 prior_B_x0_c: torch.Tensor = None, prior_B_sigma: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
                  device: torch.device = "cpu", verbose: bool = False, seed: int = 0, **kwargs):
 
         kwargs = kwargs
@@ -37,7 +37,7 @@ class PredictionModel(BaseModel, torch.nn.Module):
         # )
         super(PredictionModel, self).__init__(
             x0=x0, v=v, beta=beta, bins_num=bins_num, last_time=last_time, prior_lambda=prior_lambda,
-            prior_sigma=prior_sigma, prior_B_x0_c_sq=prior_B_x0_c_sq, prior_B_sigma=prior_B_sigma, prior_C_Q=prior_C_Q,
+            prior_sigma=prior_sigma, prior_B_x0_c=prior_B_x0_c, prior_B_sigma=prior_B_sigma, prior_C_Q=prior_C_Q,
             device=device, verbose=verbose, seed=seed, kwargs=kwargs
         )
 
@@ -55,13 +55,11 @@ class PredictionModel(BaseModel, torch.nn.Module):
 
         # Get the middle time points of the bins for TxT covariance matrix
         middle_bounds = ((bounds[1:] + bounds[:-1]) / 2.).view(1, self.get_bins_num())
-        print(
-            self.get_prior_B_x0_c_sq()
-        )
+
         # B x B matrix
         B_factor = self.get_B_factor(
             bin_centers1=middle_bounds, bin_centers2=middle_bounds,
-            prior_B_x0_c_sq=self.get_prior_B_x0_c_sq(), prior_B_sigma=self.get_prior_B_sigma(), only_kernel=True
+            prior_B_x0_c=self.get_prior_B_x0_c(), prior_B_sigma=self.get_prior_B_sigma(), only_kernel=True
         )
         # N x K matrix where K is the community size
         C_factor = self.get_C_factor(prior_C_Q=self.get_prior_C_Q())

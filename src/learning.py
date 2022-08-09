@@ -23,7 +23,7 @@ class LearningModel(BaseModel, torch.nn.Module):
             prior_sigma=torch.nn.Parameter(
                 (2.0 / bins_num) * torch.rand(size=(1,), device=device) + (1./bins_num), requires_grad=False
             ),
-            prior_B_x0_c_sq=torch.nn.Parameter(torch.ones(size=(1, 1), device=device), requires_grad=False),
+            prior_B_x0_c=torch.nn.Parameter(torch.ones(size=(1, 1), device=device), requires_grad=False),
             prior_B_sigma=torch.nn.Parameter(
                 (1 - (2.0 / bins_num)) * torch.rand(size=(1,), device=device) + (1./bins_num), requires_grad=False
             ),

@@ -10,7 +10,7 @@ class BaseModel(torch.nn.Module):
     '''
     def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, bins_num: int = 100,
                  last_time: float = 1.0, prior_lambda: float = 1e5, prior_sigma: torch.Tensor = None,
-                 prior_B_x0_c_sq: torch.Tensor = None, prior_B_sigma: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
+                 prior_B_x0_c: torch.Tensor = None, prior_B_sigma: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
                  device: torch.device = "cpu", verbose: bool = False, seed: int = 0, **kwargs):
 
         super(BaseModel, self).__init__()
@@ -40,10 +40,10 @@ class BaseModel(torch.nn.Module):
         # length-scale parameter of RBF kernel used in the construction of B
         if prior_B_sigma is not None:
             self.__prior_B_sigma = torch.as_tensor(prior_B_sigma, dtype=torch.float, device=self.__device)
-        if prior_B_x0_c_sq is not None:
-            self.__prior_B_x0_c_sq = torch.as_tensor(prior_B_x0_c_sq, dtype=torch.float, device=self.__device)
-            if self.__prior_B_x0_c_sq.dim == 1:
-                self.__prior_B_x0_c_sq.unsquueze(0)
+        if prior_B_x0_c is not None:
+            self.__prior_B_x0_c = torch.as_tensor(prior_B_x0_c, dtype=torch.float, device=self.__device)
+            if self.__prior_B_x0_c.dim == 1:
+                self.__prior_B_x0_c.unsquueze(0)
         if prior_C_Q is not None:
             self.__prior_C_Q = prior_C_Q  # the parameter required for the construction of the matrix C
         self.__R, self.__R_factor, self.__R_factor_inv = None, None, None  # Capacitance matrix
@@ -123,9 +123,9 @@ class BaseModel(torch.nn.Module):
 
         return self.__prior_B_sigma
 
-    def get_prior_B_x0_c_sq(self):
+    def get_prior_B_x0_c(self):
 
-        return self.__prior_B_x0_c_sq
+        return self.__prior_B_x0_c
 
     def get_prior_C_Q(self):
 
@@ -461,8 +461,9 @@ class BaseModel(torch.nn.Module):
 
     @staticmethod
     def get_B_factor(bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
-                     prior_B_x0_c_sq: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):
+                     prior_B_x0_c: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):
 
+        prior_B_x0_c_sq = prior_B_x0_c ** 2
         time_mat = bin_centers1 - bin_centers2.T
         prior_B_sigma = torch.clamp(prior_B_sigma, min=-1./bin_centers1.shape[1], max=1./bin_centers1.shape[1])
         B_sigma_sq = prior_B_sigma ** 2
@@ -503,7 +504,7 @@ class BaseModel(torch.nn.Module):
         # B x B matrix
         B_factor = self.get_B_factor(
             bin_centers1=middle_bounds, bin_centers2=middle_bounds,
-            prior_B_x0_c_sq=self.get_prior_B_x0_c_sq(), prior_B_sigma=self.get_prior_B_sigma()
+            prior_B_x0_c=self.get_prior_B_x0_c(), prior_B_sigma=self.get_prior_B_sigma()
         )
         # N x K matrix where K is the community size
         C_factor = self.get_C_factor(prior_C_Q=self.get_prior_C_Q())
