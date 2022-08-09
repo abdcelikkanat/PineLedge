@@ -105,7 +105,7 @@ def process(args):
         print(f"\t+ The initial time of the dataset: {all_events.get_min_event_time()}")
         print(f"\t+ The last time of the dataset: {all_events.get_max_event_time()}")
 
-    assert all_events.get_min_event_time() < 0 or all_events.get_max_event_time() > 1.0, \
+    assert all_events.get_min_event_time() >= 0 or all_events.get_max_event_time() <= 1.0, \
         "The dataset contains events smaller than 0 or greater than 1.0!"
 
     if verbose:
