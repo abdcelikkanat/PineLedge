@@ -36,6 +36,9 @@ def parse_arguments():
         '--dim', type=int, default=2, required=False, help='Dimension size'
     )
     parser.add_argument(
+        '--last_time', type=float, default=1.0, required=False, help='The last time point of the training dataset'
+    )
+    parser.add_argument(
         '--k', type=int, default=10, required=False, help='Latent dimension size of the prior element'
     )
     parser.add_argument(
@@ -72,6 +75,7 @@ def process(args):
 
     bins_num = args.bins_num
     dim = args.dim
+    last_time = args.last_time
     K = args.k
     prior_lambda = args.prior_lambda
     epoch_num = args.epoch_num
@@ -88,9 +92,6 @@ def process(args):
     if batch_size <= 0:
         batch_size = all_events.number_of_nodes()
 
-    # Normalize the events
-    all_events.normalize(init_time=0, last_time=1.0)
-
     # Get the number of nodes
     nodes_num = all_events.number_of_nodes()
     data = all_events.get_pairs(), all_events.get_events()
@@ -101,6 +102,11 @@ def process(args):
         print(f"\t+ The total number of edges: {all_events.number_of_total_events()}")
         print(f"\t+ The number of pairs having events: {all_events.number_of_event_pairs()}")
         print(f"\t+ Average number of events: {all_events.number_of_total_events()/all_events.number_of_event_pairs()}")
+        print(f"\t+ The initial time of the dataset: {all_events.get_min_event_time()}")
+        print(f"\t+ The last time of the dataset: {all_events.get_max_event_time()}")
+
+    assert all_events.get_min_event_time() < 0 or all_events.get_max_event_time() > 1.0, \
+        "The dataset contains events smaller than 0 or greater than 1.0!"
 
     if verbose:
         print(f"- The active device is {device}.")
@@ -109,7 +115,7 @@ def process(args):
     if init_path == "":
 
         lm = LearningModel(
-            data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=1., batch_size=batch_size,
+            data=data, nodes_num=nodes_num, bins_num=bins_num, dim=dim, last_time=last_time, batch_size=batch_size,
             prior_k=K, prior_lambda=prior_lambda,
             learning_rate=learning_rate, epoch_num=epoch_num, steps_per_epoch=steps_per_epoch,
             verbose=verbose, seed=seed, device=torch.device(device)

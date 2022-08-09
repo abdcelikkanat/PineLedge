@@ -254,7 +254,7 @@ class BaseModel(torch.nn.Module):
             events_times_list=torch.cat([bin_bounds[:-1]] * delta_x0.shape[0]),
             x0=torch.repeat_interleave(delta_x0, repeats=len(bin_bounds)-1, dim=0),
             v=torch.repeat_interleave(delta_v, repeats=len(bin_bounds)-1, dim=1),
-        ).reshape((delta_x0.shape[0], len(bin_bounds)-1,  self.__dim)).transpose(0, 1)
+        ).reshape((delta_x0.shape[0], len(bin_bounds)-1,  self.get_dim())).transpose(0, 1)
 
         norm_delta_xt = torch.norm(delta_xt, p=2, dim=2, keepdim=False)
         norm_delta_v = torch.norm(delta_v, p=2, dim=2, keepdim=False) + utils.EPS
@@ -479,7 +479,7 @@ class BaseModel(torch.nn.Module):
             return kernel
 
         # B x B lower triangular matrix
-        L = torch.linalg.cholesky(kernel)  # L, _ = torch.linalg.cholesky_ex(kernel)
+        L = torch.linalg.cholesky(kernel)
 
         return L
 
@@ -534,9 +534,9 @@ class BaseModel(torch.nn.Module):
             self.__R_factor = torch.linalg.cholesky(self.__R)
             self.__R_factor_inv = torch.inverse(self.__R_factor)
 
-        # Normalize and vectorize the velocities
-        v_batch = utils.vectorize(torch.index_select(self.get_v(),  dim=1, index=batch_nodes)).flatten()
+        # Normalize and vectorize the initial position and velocity vectors
         x0_batch = torch.index_select(self.get_x0(), dim=0, index=batch_nodes).flatten()
+        v_batch = utils.vectorize(torch.index_select(self.get_v(),  dim=1, index=batch_nodes)).flatten()
         x0v = torch.hstack((x0_batch, v_batch))
 
         # Computation of the squared Mahalanobis distance: v.T @ inv(D + W @ W.T) @ v
