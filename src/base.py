@@ -150,9 +150,10 @@ class BaseModel(torch.nn.Module):
     def get_xt(self, events_times_list: torch.Tensor, x0: torch.Tensor = None, v: torch.Tensor = None) -> torch.Tensor:
 
         if x0 is None or v is None:
-            raise ValueError("x0 and v cannot be none!")
+            raise ValueError("x0 and v cannot be None!")
 
-        assert len(events_times_list) == x0.shape[0] and x0.shape[0] == v.shape[1], print( len(events_times_list), x0.shape, v.shape)
+        assert len(events_times_list) == x0.shape[0] and x0.shape[0] == v.shape[1], \
+            print( len(events_times_list), x0.shape, v.shape)
 
         # Compute the event indices and residual times
         events_bin_indices = utils.div(events_times_list, self.__bin_width)
@@ -178,14 +179,10 @@ class BaseModel(torch.nn.Module):
 
         return xt
 
-    # def get_pairwise_distances(self, times_list: torch.Tensor, node_pairs: torch.Tensor = None,
-    #                            distance: str = "squared_euc"):
+    # def get_pairwise_distances(self, times_list: torch.Tensor, node_pairs: torch.Tensor = None):
     #
     #     if node_pairs is None:
     #         raise NotImplementedError("It should be implemented for every node pairs!")
-    #
-    #     if distance != "squared_euc":
-    #         raise ValueError("Invalid distance metric!")
     #
     #     x_tilde, v_tilde = self.get_x0(), self.get_v()
     #
@@ -200,18 +197,8 @@ class BaseModel(torch.nn.Module):
     #     norm = torch.norm(delta_xt, p=2, dim=1, keepdim=False) ** 2
     #
     #     return norm
-
-    # def get_intensity(self, times_list: torch.tensor, node_pairs: torch.tensor, distance: str = "squared_euc"):
-    #
-    #     return torch.exp(self.get_log_intensity(times_list, node_pairs, distance))
     #
     # def get_log_intensity(self, times_list: torch.Tensor, node_pairs: torch.Tensor, distance: str = "squared_euc"):
-    #
-    #     # Mask given node pairs
-    #     if self.__node_pairs_mask is not None:
-    #         non_idx = torch.cdist(node_pairs.T.float(), self.__node_pairs_mask.T.float()).nonzero(as_tuple=True)[0]
-    #         idx = torch.unique(non_idx, sorted=True)
-    #         node_pairs = node_pairs[:, idx]
     #
     #     # Get pairwise distances
     #     intensities = -self.get_pairwise_distances(times_list=times_list, node_pairs=node_pairs, distance=distance)
@@ -220,6 +207,10 @@ class BaseModel(torch.nn.Module):
     #                    torch.index_select(self._beta, dim=0, index=node_pairs[1])
     #
     #     return intensities
+    #
+    # def get_intensity(self, times_list: torch.tensor, node_pairs: torch.tensor, distance: str = "squared_euc"):
+    #
+    #     return torch.exp(self.get_log_intensity(times_list, node_pairs, distance))
 
     def get_log_intensity_sum(self, delta_x0: torch.Tensor, delta_v: torch.Tensor, beta_ij: torch.Tensor,
                               events_count: torch.Tensor, alpha1: torch.Tensor, alpha2: torch.Tensor):
@@ -306,6 +297,7 @@ class BaseModel(torch.nn.Module):
             temp_interval = interval
         interval = temp_interval
         interval_idx = utils.div(interval, self.__bin_width)
+        interval_idx[interval_idx == self.get_bins_num()] = self.get_bins_num() - 1
 
         x0, v, beta = self.get_x0(), self.get_v(), self.get_beta()
 

@@ -10,11 +10,11 @@ def init_worker(param_r, param_nodes_num, param_all_events):
     all_events = param_all_events
 
 
-def generate_pos_samples(seed, event_pair, events):
+def generate_pos_samples(seed, event_pair, events, low=0.0, high=1.0):
     global r
     set_seed(seed)
 
-    pos_samples = [[event_pair[0], event_pair[1], max(0, e - r), min(1, e + r)] for e in events]
+    pos_samples = [[event_pair[0], event_pair[1], max(low, e - r), min(high, e + r)] for e in events]
 
     return pos_samples
 
@@ -30,8 +30,8 @@ def generate_neg_samples(seed, e, low=0.0, high=1.0):
         sampled_pair = linearIdx2matIdx(idx=sampled_linear_pair_idx, n=nodes_num, k=2)
         events = np.asarray(all_events[sampled_pair][1])
         # If there is no any link on the interval [e-r, e+r), add it into the negative samples
-        valid_sample = True if np.sum((min(1, e + r) > events) * (events >= max(0, e - r))) == 0 else False
+        valid_sample = True if np.sum((min(high, e + r) > events) * (events >= max(low, e - r))) == 0 else False
         if not valid_sample:
             e = np.random.uniform(low=low, high=high, size=1).tolist()[0]
 
-    return [sampled_pair[0], sampled_pair[1], max(0, e - r), min(1, e + r)]
+    return [sampled_pair[0], sampled_pair[1], max(low, e - r), min(high, e + r)]

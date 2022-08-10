@@ -41,7 +41,13 @@ class PredictionModel(BaseModel, torch.nn.Module):
             device=device, verbose=verbose, seed=seed, kwargs=kwargs
         )
 
-    def get_cov_train(self):
+        self.__inv_train_cov = self.__compute_inv_train_cov()
+
+    def get_inv_train_cov(self):
+
+        return self.__inv_train_cov
+
+    def __compute_inv_train_cov(self):
 
         # Some scalars
         sigma_sq = torch.clamp(self.get_prior_sigma(), min=5. / self.get_bins_num()) ** 2
@@ -59,7 +65,7 @@ class PredictionModel(BaseModel, torch.nn.Module):
         # B x B matrix
         B_factor = self.get_B_factor(
             bin_centers1=middle_bounds, bin_centers2=middle_bounds,
-            prior_B_x0_c=self.get_prior_B_x0_c(), prior_B_sigma=self.get_prior_B_sigma(), only_kernel=True
+            prior_B_x0_c=self.get_prior_B_x0_c(), prior_B_sigma=self.get_prior_B_sigma()
         )
         # N x K matrix where K is the community size
         C_factor = self.get_C_factor(prior_C_Q=self.get_prior_C_Q())
@@ -77,61 +83,108 @@ class PredictionModel(BaseModel, torch.nn.Module):
         # It uses Woodbury matrix identity: inv(D + Kf @ Kf.T) = inv(D) - inv(D) @ Kf @ inv(R) @ Kf.T @ inv(D),
         # where R is the capacitance matrix defined by I + Kf.T @ inv(D) @ Kf
         term1 = torch.diag(sigma_sq_inv*torch.ones(size=(final_dim, ), dtype=torch.float, device=self.get_device()))
-        K_factor = torch.kron(B_factor, torch.kron(C_factor, D_factor))
+        K_factor = torch.kron(B_factor.contiguous(), torch.kron(C_factor, D_factor))
         f = (sigma_sq_inv * K_factor @ R_factor_inv.T)
         term2 = f @ f.T
 
-        return  (1.0 / lambda_sq) * (term1 - term2)
+        return (1.0 / lambda_sq) * (term1 - term2)
 
-        # def get_v_est(times_list: torch.Tensor, nodes: torch.Tensor = None):
+    def get_v_pred(self, times_list: torch.Tensor):
+
+        # Get the bin bounds
+        bounds = self.get_bins_bounds()
+
+        # Get the middle time points of the bins for TxT covariance matrix
+        middle_bounds = ((bounds[1:] + bounds[:-1]) / 2.).view(1, self.get_bins_num())
+
+        # (B+1) x len(times_list) matrix
+        B = self.get_B_factor(
+            bin_centers1=times_list.view(1, len(times_list)), bin_centers2=middle_bounds,
+            prior_B_x0_c=self.get_prior_B_x0_c(), prior_B_sigma=self.get_prior_B_sigma(), only_kernel=True
+        )
+        B = B[:, 1:]  # remove the first row corresponding to initial position vectors
+
+        # N x K matrix where K is the community size
+        C_factor = self.get_C_factor(prior_C_Q=self.get_prior_C_Q())
+        # D x D matrix
+        D_factor = self.get_D_factor(dim=self.get_dim())
+
+        # Construct the test_train covariance matrix
+        test_train_cov = torch.kron(B, torch.kron((C_factor @ C_factor.T), (D_factor @ D_factor.T)))
+
+        # Normalize and vectorize the initial position and velocity vectors
+        x0 = vectorize(self.get_x0())
+        v_batch = vectorize(self.get_v()).flatten()
+
+        # Compute the estimated velocity vectors
+        x0v = torch.hstack((x0, v_batch))
+        est = unvectorize(
+            test_train_cov.T @ self.get_inv_train_cov() @ x0v,
+            size=(len(times_list), self.get_number_of_nodes(), self.get_dim())
+        )
+
+        return est
+
+    def get_x_pred(self, times_list: torch.Tensor):
+
+        # A matrix of size N x D
+        x_last = self.get_xt(
+            events_times_list=torch.as_tensor([self.get_last_time()]*self.get_number_of_nodes()),
+            x0=self.get_x0(), v=self.get_v()
+        )
+
+        # Get the estimated velocity matrix of size len(time_samples) x N x D
+        pred_v = self.get_v_pred(times_list=times_list)
+
+        # A matrix of size len(time_samples) x N x D
+        pred_x = x_last.unsqueeze(0) + (times_list - self.get_last_time()).view(-1, 1, 1) * pred_v
+
+        return pred_x
+
+    def get_intensity_integral_pred(self, t_init: float, t_last: float, sample_size=100):
+
+        assert t_init >= self.get_last_time(), \
+            "The given boundary times must be larger than the last time of the training data!"
+
+        time_samples = torch.linspace(t_init, t_last, steps=sample_size)[:-1]  # Discard the last time point
+        delta_t = time_samples[1] - time_samples[0]
+
+        # N x N
+        beta_mat = self.get_beta().unsqueeze(1) + self.get_beta().unsqueeze(0)
+        # (sample_size-1) x N x D
+        xt = self.get_x_pred(times_list=time_samples)
+        # (sample_size-1) x (N x N)
+        delta_x_mat = torch.cdist(xt, xt, p=2)
+        # (sample_size-1) x (N x N)
+        lambda_pred = torch.sum(torch.exp(beta_mat.unsqueeze(0) - delta_x_mat), dim=0) * delta_t
+
+        return lambda_pred
+
+
+        # self.get_v().requires_grad = False
         #
-        #     if nodes is None:
-        #         nodes = torch.arange(self.get_number_of_nodes())
         #
-        #     # Get the bin bounds
-        #     bounds = self.get_bins_bounds()
+        # v_batch = mean_normalization(torch.index_select(self._v, dim=1, index=nodes))
+        # v_vect_batch = utils.vectorize(v_batch).flatten()
         #
-        #     # Get the middle time points of the bins for TxT covariance matrix
-        #     middle_bounds = ((bounds[1:] + bounds[:-1]) / 2.).view(1, self.__bins_num)
+        # # Get the bin bounds
+        # bounds = self._lm.get_bins_bounds()
+        # # Get the middle time points of the bins for TxT covariance matrix
+        # middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, len(bounds) - 1) / 2.
         #
-        #     # Normalize and vectorize the velocities
-        #     v = torch.index_select(self.get_v(), dim=1, index=nodes)
+        # # N x K matrix where K is the community size
+        # C_factor = self._lm._get_C_factor().T
+        # # D x D matrix
+        # D_factor = self._lm._get_D_factor()
         #
-        #     # B x B matrix
-        #     B_factor = self.get_B_factor(
-        #         bin_centers1=middle_bounds, bin_centers2=times_list.view(1, len(times_list)),
-        #         prior_B_x0_c_sq=self.__prior_B_x0_c_sq, prior_B_sigma=self.__prior_B_sigma, only_kernel=True
-        #     )
-        #     # N x K matrix where K is the community size
-        #     C_factor = self.get_C_factor(prior_C_Q=self.__prior_C_Q)
-        #     # D x D matrix
-        #     D_factor = self.get_D_factor(dim=self.__dim)
+        # B_test_train_factor = self._lm._get_B_factor(
+        #     bin_centers1=middle_bounds, bin_centers2=times_list.view(1, 1, len(times_list)), only_kernel=True
+        # )
+        # test_train_cov = torch.kron(B_test_train_factor, torch.kron(C_factor @ C_factor.T, D_factor @ D_factor.T))
         #
+        # mean_vt = test_train_cov @ self._train_cov_inv @ v_vect_batch
         #
-        #     self.get_v().requires_grad = False
-        #
-        #
-        #     v_batch = mean_normalization(torch.index_select(self._v, dim=1, index=nodes))
-        #     v_vect_batch = utils.vectorize(v_batch).flatten()
-        #
-        #     # Get the bin bounds
-        #     bounds = self._lm.get_bins_bounds()
-        #     # Get the middle time points of the bins for TxT covariance matrix
-        #     middle_bounds = (bounds[1:] + bounds[:-1]).view(1, 1, len(bounds) - 1) / 2.
-        #
-        #     # N x K matrix where K is the community size
-        #     C_factor = self._lm._get_C_factor().T
-        #     # D x D matrix
-        #     D_factor = self._lm._get_D_factor()
-        #
-        #     B_test_train_factor = self._lm._get_B_factor(
-        #         bin_centers1=middle_bounds, bin_centers2=times_list.view(1, 1, len(times_list)), only_kernel=True
-        #     )
-        #     test_train_cov = torch.kron(B_test_train_factor, torch.kron(C_factor @ C_factor.T, D_factor @ D_factor.T))
-        #
-        #     mean_vt = test_train_cov @ self._train_cov_inv @ v_vect_batch
-        #
-        #     return utils.unvectorize(mean_vt, size=(len(times_list), v_batch.shape[1], v_batch.shape[2]))
+        # return utils.unvectorize(mean_vt, size=(len(times_list), v_batch.shape[1], v_batch.shape[2]))
 
 
 

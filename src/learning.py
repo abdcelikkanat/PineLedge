@@ -57,7 +57,7 @@ class LearningModel(BaseModel, torch.nn.Module):
     def compute_coefficients(self, nodes_num, events_pairs, events, bins_num):
 
         if self.get_verbose():
-            print(f"- The pre-computation of the coefficients has started.")
+            print(f"+ The pre-computation of the coefficients has started.")
             init_time = time.time()
 
         # Initialization

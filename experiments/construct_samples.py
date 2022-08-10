@@ -190,7 +190,8 @@ if __name__ == '__main__':
             zip(
                 np.random.randint(0, 1e4, size=(len(first_part_pairs), )),
                 first_part_pairs,
-                first_part_events
+                first_part_events,
+                [0.] * len(first_part_pairs), [split_time] * len(first_part_pairs)
             )
         )
     pos_samples = [value for sublist in output for value in sublist]
