@@ -134,6 +134,7 @@ if __name__ == '__main__':
                 idx += 1
     nodes_num = len(np.unique(first_part_pairs))
     ####################################################################################################################
+    # Training/testing/validation sample computation in the first set
 
     # Compute the number of training/testing/validation samples
     event_pairs_num = len(first_part_pairs)
@@ -181,36 +182,63 @@ if __name__ == '__main__':
         )
 
     ####################################################################################################################
+    # Generate samples for the testing set of the network reconstruction experiment
+    first_part_pairs, first_part_events = shuffle(first_part_pairs, first_part_events)
+    train_pairs, train_events = shuffle(train_pairs, train_events)
 
-    residual_events = Events(data=(first_part_events, first_part_pairs, range(nodes_num)))
-    # Generate samples for the testing set
-    with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, residual_events)) as p:
+    first_part = Events(data=(first_part_events, first_part_pairs, range(nodes_num)))
+    train = Events(data=(train_events, train_pairs, range(nodes_num)))
+    test_valid = Events(data=(test_valid_events, test_valid_pairs, range(nodes_num)))
+
+    # Generate positive samples for network reconstruction
+    with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, train)) as p:
         output = p.starmap(
             utils.generate_pos_samples,
             zip(
-                np.random.randint(0, 1e4, size=(len(first_part_pairs), )),
+                np.random.randint(0, 1e4, size=(len(train_pairs), )),
                 first_part_pairs,
                 first_part_events,
-                [0.] * len(first_part_pairs), [split_time] * len(first_part_pairs)
+                [0.] * len(train_pairs), [split_time] * len(train_pairs)
             )
         )
-    pos_samples = [value for sublist in output for value in sublist]
+    train_pos_samples = [value for sublist in output for value in sublist]
 
-    with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, residual_events)) as p:
+    # Generate positive samples for test/valid reconstruction
+    with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, test_valid)) as p:
+        output = p.starmap(
+            utils.generate_pos_samples,
+            zip(
+                np.random.randint(0, 1e4, size=(len(test_valid_pairs),)),
+                first_part_pairs,
+                first_part_events,
+                [0.] * len(test_valid_pairs), [split_time] * len(test_valid_pairs)
+            )
+        )
+    test_pos_samples = [value for sublist in output[:len(output)//2] for value in sublist]
+    valid_pos_samples = [value for sublist in output[len(output)//2:] for value in sublist]
+
+    # Generate negative samples for all train/test/valid reconstruction
+    with Pool(threads_num, initializer=utils.init_worker, initargs=(r, nodes_num, first_part)) as p:
         output = p.starmap(
             utils.generate_neg_samples,
             zip(
-                np.random.randint(0, 1e4, size=(len(pos_samples),)),
-                np.random.uniform(low=0.0, high=split_time, size=(len(pos_samples),)).tolist(),
-                [0.] * len(pos_samples), [split_time] * len(pos_samples)
+                np.random.randint(0, 1e4, size=(len(train_pos_samples)+len(test_valid_pairs),)),
+                np.random.uniform(low=0.0, high=split_time, size=(len(train_pos_samples)+len(test_valid_pairs),)).tolist(),
+                [0.] * (len(train_pos_samples)+len(test_valid_pairs)),
+                [split_time] * (len(train_pos_samples)+len(test_valid_pairs))
             )
         )
-    neg_samples = output
+    train_neg_samples, test_valid_neg_samples = output[:len(train_pos_samples)], output[len(train_pos_samples):]
+    test_neg_samples, valid_neg_samples = test_valid_neg_samples[:len(test_valid_neg_samples)//2], test_valid_neg_samples[len(test_valid_neg_samples)//2:]
 
     with open(info_path, 'a+') as f:
-        f.write(f"+ Total number of events in the first set: {sum([len(l) for l in first_part_events])}\n")
-        f.write(f"\t- Positive samples in the first set: {len(pos_samples)}\n")
-        f.write(f"\t- Negative samples in the first set: {len(neg_samples)}\n")
+        f.write(f"+ Generated samples\n")
+        f.write(f"\t- Positive samples in the train set: {len(train_pos_samples)}\n")
+        f.write(f"\t- Positive samples in the test set: {len(test_pos_samples)}\n")
+        f.write(f"\t- Positive samples in the valid set: {len(valid_pos_samples)}\n")
+        f.write(f"\t- Negative samples in the train set: {len(train_neg_samples)}\n")
+        f.write(f"\t- Negative samples in the test set: {len(test_neg_samples)}\n")
+        f.write(f"\t- Negative samples in the valid set: {len(valid_neg_samples)}\n")
 
     ####################################################################################################################
 
@@ -223,24 +251,38 @@ if __name__ == '__main__':
     with open(events_file_path, 'wb') as f:
         pickle.dump(train_events, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # Save the samples
-    l = len(pos_samples) // 2
+    # For Reconstruction
+    reconstruction_folder_path = os.path.join(output_folder, "reconstruction")
+    if not os.path.exists(reconstruction_folder_path):
+        os.makedirs(reconstruction_folder_path)
+
+    pos_sample_file_path = os.path.join(reconstruction_folder_path, 'pos.samples')
+    with open(pos_sample_file_path, 'wb') as f:
+        pickle.dump(train_pos_samples, f, protocol=pickle.HIGHEST_PROTOCOL)
+    neg_sample_file_path = os.path.join(reconstruction_folder_path, 'neg.samples')
+    with open(neg_sample_file_path, 'wb') as f:
+        pickle.dump(train_neg_samples, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # For Completion
+    completion_folder_path = os.path.join(output_folder, "completion")
+    if not os.path.exists(completion_folder_path):
+        os.makedirs(completion_folder_path)
 
     # Validation samples
-    pos_sample_file_path = os.path.join(output_folder, 'valid_pos.samples')
+    pos_sample_file_path = os.path.join(completion_folder_path, 'valid_pos.samples')
     with open(pos_sample_file_path, 'wb') as f:
-        pickle.dump(pos_samples[:l], f, protocol=pickle.HIGHEST_PROTOCOL)
-    neg_sample_file_path = os.path.join(output_folder, 'valid_neg.samples')
+        pickle.dump(valid_pos_samples, f, protocol=pickle.HIGHEST_PROTOCOL)
+    neg_sample_file_path = os.path.join(completion_folder_path, 'valid_neg.samples')
     with open(neg_sample_file_path, 'wb') as f:
-        pickle.dump(neg_samples[:l], f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(valid_neg_samples, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     # Testing samples
-    pos_sample_file_path = os.path.join(output_folder, 'test_pos.samples')
+    pos_sample_file_path = os.path.join(completion_folder_path, 'test_pos.samples')
     with open(pos_sample_file_path, 'wb') as f:
-        pickle.dump(pos_samples[l:], f, protocol=pickle.HIGHEST_PROTOCOL)
-    neg_sample_file_path = os.path.join(output_folder, 'test_neg.samples')
+        pickle.dump(test_pos_samples, f, protocol=pickle.HIGHEST_PROTOCOL)
+    neg_sample_file_path = os.path.join(completion_folder_path, 'test_neg.samples')
     with open(neg_sample_file_path, 'wb') as f:
-        pickle.dump(neg_samples[l:], f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(test_neg_samples, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     # For prediction
     prediction_folder_path = os.path.join(output_folder, "prediction")
