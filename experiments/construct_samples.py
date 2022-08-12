@@ -75,7 +75,8 @@ if __name__ == '__main__':
         f.write(f"\t It contains {events.number_of_total_events()} links in total.\n")
 
     ####################################################################################################################
-
+    with open(info_path, 'w') as f:
+        f.write("+ The network is being split into two parts.\n")
     # Split the dataset
     all_event_times = [e for pair_events in events.get_events() for e in pair_events]
     all_event_times.sort()
@@ -104,13 +105,16 @@ if __name__ == '__main__':
             second_part_pairs.pop()
             second_part_events.pop()
 
+    with open(info_path, 'a+') as f:
+        f.write(f"\t- The first set contains {len(np.unique(first_part_pairs))} unique nodes.\n")
+        f.write(f"\t- The first set has {len(first_part_pairs)} pairs having events.\n")
+        f.write(f"\t- The second set contains {len(np.unique(second_part_pairs))} unique nodes.\n")
+        f.write(f"\t- The second set has {len(second_part_pairs)} pairs having events.\n")
+
     if len(np.unique(pairs)) != len(np.unique(first_part_pairs)):
         with open(info_path, 'a+') as f:
             f.write("+ The first set contains less number of nodes than the original network.\n")
-            f.write(f"\t- The first set has {len(np.unique(first_part_pairs))} nodes.\n")
-            f.write(f"\t- The first set has {len(first_part_pairs)} event pairs.\n")
-            f.write(f"\t- The second set has {len(np.unique(second_part_pairs))} nodes.\n")
-            f.write(f"\t- The second set has {len(second_part_pairs)} event pairs.\n")
+            f.write(f"\t- Extra nodes are being removed and relabeling is being done.\n")
 
         selected_nodes = np.unique(first_part_pairs)
         node2newlabel = dict(zip(selected_nodes, range(len(selected_nodes))))
@@ -135,6 +139,8 @@ if __name__ == '__main__':
     nodes_num = len(np.unique(first_part_pairs))
     ####################################################################################################################
     # Training/testing/validation sample computation in the first set
+    with open(info_path, 'a+') as f:
+        f.write("+ The training/testing/validation sets construction has started out from the first set.\n")
 
     # Compute the number of training/testing/validation samples
     event_pairs_num = len(first_part_pairs)
@@ -155,10 +161,10 @@ if __name__ == '__main__':
     test_valid_events = first_part_events[train_samples_num:]
 
     with open(info_path, 'a+') as f:
-        f.write(f"+ Validation and testing set generation from the first set. {event_pairs_num}\n")
         f.write("\t- The number of pairs in the training set: {}\n".format(len(train_pairs)))
+        f.write("\t- It contains {} events in total.\n".format(sum([len(el) for el in train_events])))
         f.write("\t- The number of pairs in the valid + test set: {}\n".format(len(test_valid_pairs)))
-
+        f.write("\t- It contains {} events in total.\n".format(sum([len(el) for el in test_valid_events])))
     ####################################################################################################################
 
     # Remove the valid/test pairs existing in the prediction
@@ -222,14 +228,14 @@ if __name__ == '__main__':
         output = p.starmap(
             utils.generate_neg_samples,
             zip(
-                np.random.randint(0, 1e4, size=(len(train_pos_samples)+len(test_valid_pairs),)),
-                np.random.uniform(low=0.0, high=split_time, size=(len(train_pos_samples)+len(test_valid_pairs),)).tolist(),
-                [0.] * (len(train_pos_samples)+len(test_valid_pairs)),
-                [split_time] * (len(train_pos_samples)+len(test_valid_pairs))
+                np.random.randint(0, 1e4, size=(len(train_pos_samples)+len(test_pos_samples)+len(valid_pos_samples),)),
+                np.random.uniform(low=0.0, high=split_time, size=(len(train_pos_samples)+len(test_pos_samples)+len(valid_pos_samples),)).tolist(),
+                [0.] * (len(train_pos_samples)++len(test_pos_samples)+len(valid_pos_samples)),
+                [split_time] * (len(train_pos_samples)+len(test_pos_samples)+len(valid_pos_samples))
             )
         )
     train_neg_samples, test_valid_neg_samples = output[:len(train_pos_samples)], output[len(train_pos_samples):]
-    test_neg_samples, valid_neg_samples = test_valid_neg_samples[:len(test_valid_neg_samples)//2], test_valid_neg_samples[len(test_valid_neg_samples)//2:]
+    test_neg_samples, valid_neg_samples = test_valid_neg_samples[:len(test_pos_samples)], test_valid_neg_samples[len(test_pos_samples):]
 
     with open(info_path, 'a+') as f:
         f.write(f"+ Generated samples\n")
