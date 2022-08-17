@@ -75,7 +75,7 @@ if __name__ == '__main__':
         f.write(f"\t It contains {events.number_of_total_events()} links in total.\n")
 
     ####################################################################################################################
-    with open(info_path, 'w') as f:
+    with open(info_path, 'a+') as f:
         f.write("+ The network is being split into two parts.\n")
     # Split the dataset
     all_event_times = [e for pair_events in events.get_events() for e in pair_events]
@@ -131,7 +131,6 @@ if __name__ == '__main__':
             if second_part_pairs[idx][0] not in selected_nodes or second_part_pairs[idx][1] not in selected_nodes:
                 second_part_pairs.pop(idx)
                 second_part_events.pop(idx)
-
             else:
                 pair = second_part_pairs[idx]
                 second_part_pairs[idx][0], second_part_pairs[idx][1] = node2newlabel[pair[0]], node2newlabel[pair[1]]
@@ -189,8 +188,8 @@ if __name__ == '__main__':
 
     ####################################################################################################################
     # Generate samples for the testing set of the network reconstruction experiment
-    first_part_pairs, first_part_events = shuffle(first_part_pairs, first_part_events)
-    train_pairs, train_events = shuffle(train_pairs, train_events)
+    # first_part_pairs, first_part_events = shuffle(first_part_pairs, first_part_events)
+    # train_pairs, train_events = shuffle(train_pairs, train_events)
 
     first_part = Events(data=(first_part_events, first_part_pairs, range(nodes_num)))
     train = Events(data=(train_events, train_pairs, range(nodes_num)))
@@ -202,8 +201,8 @@ if __name__ == '__main__':
             utils.generate_pos_samples,
             zip(
                 np.random.randint(0, 1e4, size=(len(train_pairs), )),
-                first_part_pairs,
-                first_part_events,
+                train_pairs,
+                train_events,
                 [0.] * len(train_pairs), [split_time] * len(train_pairs)
             )
         )
@@ -215,8 +214,8 @@ if __name__ == '__main__':
             utils.generate_pos_samples,
             zip(
                 np.random.randint(0, 1e4, size=(len(test_valid_pairs),)),
-                first_part_pairs,
-                first_part_events,
+                test_valid_pairs,
+                test_valid_events,
                 [0.] * len(test_valid_pairs), [split_time] * len(test_valid_pairs)
             )
         )
