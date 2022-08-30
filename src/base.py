@@ -179,38 +179,37 @@ class BaseModel(torch.nn.Module):
 
         return xt
 
-    # def get_pairwise_distances(self, times_list: torch.Tensor, node_pairs: torch.Tensor = None):
-    #
-    #     if node_pairs is None:
-    #         raise NotImplementedError("It should be implemented for every node pairs!")
-    #
-    #     x_tilde, v_tilde = self.get_x0(), self.get_v()
-    #
-    #     delta_x0 = torch.index_select(x_tilde, dim=0, index=node_pairs[0]) - \
-    #                torch.index_select(x_tilde, dim=0, index=node_pairs[1])
-    #     delta_v = torch.index_select(v_tilde, dim=1, index=node_pairs[0]) - \
-    #               torch.index_select(v_tilde, dim=1, index=node_pairs[1])
-    #
-    #     # delta_xt is a tensor of size len(times_list) x dim
-    #     delta_xt = self.get_xt(events_times_list=times_list, x0=delta_x0, v=delta_v)
-    #     # Compute the squared Euclidean distance
-    #     norm = torch.norm(delta_xt, p=2, dim=1, keepdim=False) ** 2
-    #
-    #     return norm
-    #
-    # def get_log_intensity(self, times_list: torch.Tensor, node_pairs: torch.Tensor, distance: str = "squared_euc"):
-    #
-    #     # Get pairwise distances
-    #     intensities = -self.get_pairwise_distances(times_list=times_list, node_pairs=node_pairs, distance=distance)
-    #     # Add an additional axis for beta parameters for time dimension
-    #     intensities += torch.index_select(self._beta, dim=0, index=node_pairs[0]) + \
-    #                    torch.index_select(self._beta, dim=0, index=node_pairs[1])
-    #
-    #     return intensities
-    #
-    # def get_intensity(self, times_list: torch.tensor, node_pairs: torch.tensor, distance: str = "squared_euc"):
-    #
-    #     return torch.exp(self.get_log_intensity(times_list, node_pairs, distance))
+    def get_pairwise_distances(self, times_list: torch.Tensor, node_pairs: torch.Tensor = None):
+
+        if node_pairs is None:
+            raise NotImplementedError("It should be implemented for every node pairs!")
+
+        x_tilde, v_tilde = self.get_x0(), self.get_v()
+
+        delta_x0 = torch.index_select(x_tilde, dim=0, index=node_pairs[0]) - \
+                   torch.index_select(x_tilde, dim=0, index=node_pairs[1])
+        delta_v = torch.index_select(v_tilde, dim=1, index=node_pairs[0]) - \
+                  torch.index_select(v_tilde, dim=1, index=node_pairs[1])
+
+        # delta_xt is a tensor of size len(times_list) x dim
+        delta_xt = self.get_xt(events_times_list=times_list, x0=delta_x0, v=delta_v)
+        # Compute the squared Euclidean distance
+        norm = torch.norm(delta_xt, p=2, dim=1, keepdim=False) ** 2
+
+        return norm
+
+    def get_log_intensity(self, times_list: torch.Tensor, node_pairs: torch.Tensor):
+        # Get pairwise distances
+        intensities = -self.get_pairwise_distances(times_list=times_list, node_pairs=node_pairs)
+        # Add an additional axis for beta parameters for time dimension
+        intensities += torch.index_select(self.get_beta(), dim=0, index=node_pairs[0]) + \
+                       torch.index_select(self.get_beta(), dim=0, index=node_pairs[1])
+
+        return intensities
+
+    def get_intensity(self, times_list: torch.tensor, node_pairs: torch.tensor):
+
+        return torch.exp(self.get_log_intensity(times_list, node_pairs))
 
     def get_log_intensity_sum(self, delta_x0: torch.Tensor, delta_v: torch.Tensor, beta_ij: torch.Tensor,
                               events_count: torch.Tensor, alpha1: torch.Tensor, alpha2: torch.Tensor):
@@ -453,19 +452,20 @@ class BaseModel(torch.nn.Module):
 
     @staticmethod
     def get_B_factor(bin_centers1: torch.Tensor, bin_centers2: torch.Tensor,
-                     prior_B_x0_c: torch.Tensor, prior_B_sigma: torch.Tensor, only_kernel=False):
+                     prior_B_x0_c: torch.Tensor, prior_B_ls: torch.Tensor, only_kernel=False):
 
         prior_B_x0_c_sq = prior_B_x0_c ** 2
         time_mat = bin_centers1 - bin_centers2.T
-        prior_B_sigma = torch.clamp(prior_B_sigma, min=-1./bin_centers1.shape[1], max=1./bin_centers1.shape[1])
-        B_sigma_sq = prior_B_sigma ** 2
-        kernel = torch.exp(-0.5 * torch.div(time_mat ** 2, B_sigma_sq))
+        # prior_B_ls = torch.clamp(prior_B_ls, min=-1./bin_centers1.shape[1], max=1./bin_centers1.shape[1])
+        # prior_B_ls = torch.clamp(prior_B_ls, min=-1e+2, max=1e+2)
+        B_ls_sq = prior_B_ls ** 2
+        kernel = torch.exp(-torch.div(time_mat ** 2, B_ls_sq)/2.0)
 
         # Combine the entry required for x0 with the velocity vectors covariance
         kernel = torch.block_diag(prior_B_x0_c_sq, kernel)
 
-        # Add a constant term to get rid of computational problems
-        kernel = kernel + utils.EPS * torch.eye(n=kernel.shape[0], m=kernel.shape[1])
+        # Add a constant term to get rid of computational problems and singularity
+        kernel = kernel + (10*utils.EPS) * torch.eye(n=kernel.shape[0], m=kernel.shape[1])
 
         if only_kernel:
             return kernel

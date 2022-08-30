@@ -3,7 +3,6 @@ import math
 import random
 import torch
 import numpy as np
-from src.events import Events
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 
@@ -27,14 +26,6 @@ def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-
-
-def load_dataset(dataset_folder, seed):
-    all_events = Events(seed=seed)
-    all_events.read(dataset_folder)
-    all_events.normalize(init_time=0, last_time=1.0)
-
-    return all_events
 
 
 def pair_iter(n, undirected=True):

@@ -6,7 +6,7 @@ import numpy as np
 import pickle as pkl
 import copy
 import matplotlib.pyplot as plt
-from utils import *
+from utils.common import pair_iter, pairIdx2flatIdx
 import networkx as nx
 
 
@@ -542,7 +542,7 @@ class Events:
 
             # possible_neg_samples = [(i, j) for i, j in subevents.get_pairs() if not len(subevents[(i, j)][1])]
             nodes = subevents.get_nodes()
-            possible_neg_samples = [(nodes[i], nodes[j]) for i, j in utils.pair_iter(n=len(nodes)) if not len(subevents[(nodes[i], nodes[j])][1])]
+            possible_neg_samples = [(nodes[i], nodes[j]) for i, j in pair_iter(n=len(nodes)) if not len(subevents[(nodes[i], nodes[j])][1])]
             possible_neg_samples = [(sample[0], sample[1], init_time, last_time) for sample in possible_neg_samples]
 
             all_pos_samples = pos_samples
@@ -685,7 +685,7 @@ class Events:
         c = ['r.', 'b.']
         for label, sample in zip(labels, samples):
 
-            plt.plot(sample[2], utils.pairIdx2flatIdx(i=sample[0], j=sample[1], n=self.number_of_nodes()), c[label])
+            plt.plot(sample[2], pairIdx2flatIdx(i=sample[0], j=sample[1], n=self.number_of_nodes()), c[label])
 
         plt.show()
 

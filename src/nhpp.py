@@ -1,6 +1,6 @@
 import numpy as np
 import random
-from utils import *
+import utils
 
 
 class NHPP:

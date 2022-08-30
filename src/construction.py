@@ -1,15 +1,16 @@
+import os
 import torch
 import numpy as np
+import pickle as pkl
 from src.nhpp import NHPP
 from src.base import BaseModel
-import pickle as pkl
-from utils import *
+import utils
 
 
 class InitialPositionVelocitySampler:
 
     def __init__(self, dim: int, bins_num: int, cluster_sizes: list,
-                 prior_lambda: float, prior_sigma: float, prior_B_x0_c: float, prior_B_sigma: float,
+                 prior_lambda: float, prior_sigma: float, prior_B_x0_c: float, prior_B_ls: float,
                  device: torch.device = "cpu", verbose: bool = False, seed: int = 0):
 
         self.__dim = dim
@@ -17,37 +18,33 @@ class InitialPositionVelocitySampler:
         self.__cluster_sizes = cluster_sizes
         self.__prior_lambda = prior_lambda
         self.__prior_sigma = prior_sigma
-        self.__prior_B_sigma = prior_B_sigma
+        self.__prior_B_ls = prior_B_ls
         self.__prior_B_x0_c = prior_B_x0_c
         self.__time_interval_lengths = [1]*bins_num
 
         self.__nodes_num = sum(cluster_sizes)
         self.__K = len(cluster_sizes)
-        self.__x0 = None
-        self.__v = None
 
         self.__device = device
         self.__verbose = verbose
         self.__seed = seed
 
-        self.__sample()
-
-    def __sample(self):
+    def sample(self):
 
         # Get the factor of B matrix, (bins)
         bin_centers = torch.arange(0.5, 0.5*(self.__bins_num+1), 0.5).view(1, self.__bins_num)
 
+        # Construct the factor of B matrix (bins)
         B_factor = BaseModel.get_B_factor(
             bin_centers1=bin_centers, bin_centers2=bin_centers,
-            prior_B_x0_c_sq=torch.as_tensor(self.__prior_B_x0_c**2).view(1, 1),
-            prior_B_sigma=torch.as_tensor(self.__prior_B_sigma),
-            only_kernel=True
+            prior_B_x0_c=torch.as_tensor(self.__prior_B_x0_c, dtype=torch.float),
+            prior_B_ls=torch.as_tensor(self.__prior_B_ls),
         )
 
         # Get the factor of C matrix, (nodes)
-        prior_C_Q = torch.ones(size=(self.__nodes_num, self.__K), dtype=torch.float) * (-1e6)
+        prior_C_Q = torch.zeros(size=(self.__nodes_num, self.__K), dtype=torch.float)
         for k in range(self.__K):
-            prior_C_Q[range(sum(self.__cluster_sizes[:k]), sum(self.__cluster_sizes[:k + 1])), k] = 1e6
+            prior_C_Q[sum(self.__cluster_sizes[:k]):sum(self.__cluster_sizes[:k + 1]), k] = 1
         C_factor = BaseModel.get_C_factor(prior_C_Q)
 
         # Get the factor of D matrix, (dimension)
@@ -55,7 +52,9 @@ class InitialPositionVelocitySampler:
 
         # Sample the initial position and velocity vectors
         final_dim = self.__nodes_num * (self.__bins_num+1) * self.__dim
-        cov_factor = (self.__prior_lambda) * torch.kron(torch.kron(B_factor, C_factor), D_factor)
+        cov_factor = self.__prior_lambda * torch.kron(
+            B_factor.contiguous(), torch.kron(C_factor, D_factor.contiguous())
+        )
         cov_diag = (self.__prior_lambda ** 2) * (self.__prior_sigma ** 2) * torch.ones(final_dim)
         lmn = torch.distributions.LowRankMultivariateNormal(
             loc=torch.zeros(size=(final_dim,)),
@@ -65,20 +64,10 @@ class InitialPositionVelocitySampler:
 
         sample = lmn.sample().reshape(shape=(self.__bins_num + 1, self.__nodes_num, self.__dim))
 
-        self.__x0, self.__v = torch.split(sample, [1, self.__bins_num])
-        self.__x0 = self.__x0.squeeze(0)
+        x0, v = torch.split(sample, [1, self.__bins_num])
+        x0 = x0.squeeze(0)
 
-    def get_x0(self):
-
-        return self.__x0
-
-    def get_v(self):
-
-        return self.__v
-
-    def get_last_time(self):
-
-        return self.__bins_num
+        return x0, v, (1.0 * self.__bins_num)
 
 
 class ConstructionModel(BaseModel):
@@ -106,7 +95,7 @@ class ConstructionModel(BaseModel):
         # Add the initial time point
         critical_points = []
 
-        for idx in range(self._bins_num):
+        for idx in range(self.get_bins_num()):
 
             interval_init_time = bin_bounds[idx]
             interval_last_time = bin_bounds[idx+1]
@@ -116,7 +105,7 @@ class ConstructionModel(BaseModel):
 
             # Get the differences
             delta_idx_x = x[idx, i, :] - x[idx, j, :]
-            delta_idx_v = self._v[idx, i, :] - self._v[idx, j, :]
+            delta_idx_v = self.get_v()[idx, i, :] - self.get_v()[idx, j, :]
 
             # For the model containing only position and velocity
             # Find the point in which the derivative equal to 0
@@ -135,16 +124,20 @@ class ConstructionModel(BaseModel):
         if nodes is not None:
             raise NotImplementedError("It must be implemented for given specific nodes!")
 
-        node_pairs = torch.triu_indices(row=self._nodes_num, col=self._nodes_num, offset=1, device=self._device)
+        node_pairs = torch.triu_indices(
+            row=self.get_number_of_nodes(), col=self.get_number_of_nodes(), offset=1, device=self.get_device()
+        )
 
         # Upper triangular matrix of lists
-        events_time = {i: {j: [] for j in range(i+1, self._nodes_num)} for i in range(self._nodes_num-1)}
+        events_time = {
+            i: {j: [] for j in range(i+1, self.get_number_of_nodes())} for i in range(self.get_number_of_nodes()-1)
+        }
         # Get the positions at the beginning of each time bin for every node
         x = self.get_xt(
-            events_times_list=self.get_bins_bounds()[:-1].repeat(self._nodes_num, ),
-            x0=torch.repeat_interleave(self._x0, repeats=self._bins_num, dim=0),
-            v=torch.repeat_interleave(self._v, repeats=self._bins_num, dim=1)
-        ).reshape((self._nodes_num, self._bins_num,  self._dim)).transpose(0, 1)
+            events_times_list=self.get_bins_bounds()[:-1].repeat(self.get_number_of_nodes(), ),
+            x0=torch.repeat_interleave(self.get_x0(), repeats=self.get_bins_num(), dim=0),
+            v=torch.repeat_interleave(self.get_v(), repeats=self.get_bins_num(), dim=1)
+        ).reshape((self.get_number_of_nodes(), self.get_bins_num(),  self.get_dim())).transpose(0, 1)
 
         for i, j in zip(node_pairs[0], node_pairs[1]):
             # Define the intensity function for each node pair (i,j)
@@ -155,7 +148,8 @@ class ConstructionModel(BaseModel):
             critical_points = self.__get_critical_points(i=i, j=j, x=x)
             # Simulate the src
             nhpp_ij = NHPP(
-                intensity_func=intensity_func, critical_points=critical_points, seed=self._seed+i*self._nodes_num + j
+                intensity_func=intensity_func, critical_points=critical_points,
+                seed=self.get_seed() + i * self.get_number_of_nodes() + j
             )
             ij_events_time = nhpp_ij.simulate()
             # Add the event times
@@ -169,7 +163,7 @@ class ConstructionModel(BaseModel):
 
     def save(self, folder_path):
         events, pairs = [], []
-        for i, j in utils.pair_iter(n=self._nodes_num):
+        for i, j in utils.pair_iter(n=self.get_number_of_nodes()):
             pair_events = self.__events[i][j]
             if len(pair_events):
                 pairs.append([i, j])
