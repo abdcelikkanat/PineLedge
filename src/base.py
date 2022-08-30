@@ -10,7 +10,7 @@ class BaseModel(torch.nn.Module):
     '''
     def __init__(self, x0: torch.Tensor, v: torch.Tensor, beta: torch.Tensor, bins_num: int = 100,
                  last_time: float = 1.0, prior_lambda: float = 1e5, prior_sigma: torch.Tensor = None,
-                 prior_B_x0_c: torch.Tensor = None, prior_B_sigma: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
+                 prior_B_x0_c: torch.Tensor = None, prior_B_ls: torch.Tensor = None, prior_C_Q: torch.Tensor= None,
                  device: torch.device = "cpu", verbose: bool = False, seed: int = 0, **kwargs):
 
         super(BaseModel, self).__init__()
@@ -38,8 +38,8 @@ class BaseModel(torch.nn.Module):
         if prior_sigma is not None:
             self.__prior_sigma = torch.as_tensor(prior_sigma, dtype=torch.float, device=self.__device)
         # length-scale parameter of RBF kernel used in the construction of B
-        if prior_B_sigma is not None:
-            self.__prior_B_sigma = torch.as_tensor(prior_B_sigma, dtype=torch.float, device=self.__device)
+        if prior_B_ls is not None:
+            self.__prior_B_ls = torch.as_tensor(prior_B_ls, dtype=torch.float, device=self.__device)
         if prior_B_x0_c is not None:
             self.__prior_B_x0_c = torch.as_tensor(prior_B_x0_c, dtype=torch.float, device=self.__device)
             if self.__prior_B_x0_c.dim == 1:
@@ -119,9 +119,9 @@ class BaseModel(torch.nn.Module):
 
         return self.__prior_sigma
 
-    def get_prior_B_sigma(self):
+    def get_prior_B_ls(self):
 
-        return self.__prior_B_sigma
+        return self.__prior_B_ls
 
     def get_prior_B_x0_c(self):
 
@@ -496,7 +496,7 @@ class BaseModel(torch.nn.Module):
         # B x B matrix
         B_factor = self.get_B_factor(
             bin_centers1=middle_bounds, bin_centers2=middle_bounds,
-            prior_B_x0_c=self.get_prior_B_x0_c(), prior_B_sigma=self.get_prior_B_sigma()
+            prior_B_x0_c=self.get_prior_B_x0_c(), prior_B_ls=self.get_prior_B_ls()
         )
         # N x K matrix where K is the community size
         C_factor = self.get_C_factor(prior_C_Q=self.get_prior_C_Q())
